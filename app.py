@@ -12,9 +12,11 @@ COLOR_ROSSO = "#C62828"
 BG_APP = "#EEF1F4"
 BG_BOX = "#F7F8FA"
 BG_FIELD = "#FFFFFF"
-BORDER_COLOR = "#AEB7C2"
+BORDER_COLOR = "#97A3AF"
+BORDER_COLOR_STRONG = "#7F8C99"
 TEXT_COLOR = "#1E2A36"
-TEXT_MUTED = "#4E5D6C"
+TEXT_MUTED = "#425466"
+
 GIORNI_SETTIMANA = ["LUN", "MAR", "MER", "GIO", "VEN", "SAB", "DOM"]
 MESI = {
     1: "Gennaio",
@@ -101,6 +103,7 @@ def inject_global_css():
                 --box-bg: {BG_BOX};
                 --field-bg: {BG_FIELD};
                 --border: {BORDER_COLOR};
+                --border-strong: {BORDER_COLOR_STRONG};
                 --text: {TEXT_COLOR};
                 --muted: {TEXT_MUTED};
                 --red: {COLOR_ROSSO};
@@ -116,35 +119,42 @@ def inject_global_css():
             }}
 
             .block-container {{
-                padding-top: 1.0rem;
+                padding-top: 0.8rem;
                 padding-bottom: 2rem;
                 max-width: 96%;
             }}
 
             section[data-testid="stSidebar"] {{
-                background: #E4E8ED !important;
-                border-right: 2px solid var(--border);
+                background: #E3E8EE !important;
+                border-right: 2px solid var(--border-strong);
             }}
 
             section[data-testid="stSidebar"] * {{
-                font-size: 17px !important;
+                font-size: 18px !important;
                 color: var(--text) !important;
             }}
 
             .sidebar-logo-wrap {{
-                padding-top: 4px;
-                padding-bottom: 10px;
-                border-bottom: 2px solid var(--border);
-                margin-bottom: 12px;
+                padding-top: 6px;
+                padding-bottom: 12px;
+                border-bottom: 2px solid var(--border-strong);
+                margin-bottom: 14px;
             }}
 
-            .main-header-wrap {{
+            .main-header-box {{
                 background: var(--box-bg);
-                border: 2px solid var(--border);
+                border: 2px solid var(--border-strong);
                 border-radius: 16px;
-                padding: 18px 20px 16px 20px;
+                padding: 16px 18px;
                 margin-bottom: 18px;
-                box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+            }}
+
+            .page-title-box {{
+                background: var(--box-bg);
+                border: 2px solid var(--border-strong);
+                border-radius: 16px;
+                padding: 14px 16px;
+                margin-bottom: 16px;
             }}
 
             .main-header-title {{
@@ -163,25 +173,24 @@ def inject_global_css():
             }}
 
             .section-title {{
-                font-size: 1.55rem;
+                font-size: 1.65rem;
                 font-weight: 800;
                 color: var(--red);
-                margin-top: 0.15rem;
-                margin-bottom: 0.8rem;
+                margin: 0;
                 line-height: 1.15;
             }}
 
             .section-box {{
                 background: var(--box-bg);
-                border: 2px solid var(--border);
+                border: 2px solid var(--border-strong);
                 border-radius: 16px;
                 padding: 16px;
                 margin-bottom: 16px;
             }}
 
             .inner-box {{
-                background: #F3F5F7;
-                border: 2px solid #BBC4CE;
+                background: #F4F6F8;
+                border: 2px solid var(--border-strong);
                 border-radius: 14px;
                 padding: 14px;
                 margin-bottom: 14px;
@@ -197,7 +206,7 @@ def inject_global_css():
             }}
 
             .activity-note {{
-                border: 2px dashed #C5CED8;
+                border: 2px dashed var(--border-strong);
                 background: #FAFBFC;
                 border-radius: 12px;
                 padding: 10px 12px;
@@ -216,25 +225,23 @@ def inject_global_css():
             .activity-pill {{
                 border-radius: 999px;
                 padding: 6px 12px;
-                font-size: 0.95rem;
-                font-weight: 700;
-                border: 2px solid var(--border);
+                font-size: 0.97rem;
+                font-weight: 800;
+                border: 2px solid var(--border-strong);
                 background: white;
+                color: var(--text);
             }}
 
             .pill-edicola {{
-                background: #FFF2F2;
-                border-color: #D8A0A0;
+                background: #FFF1F1;
             }}
 
             .pill-mondadori {{
-                background: #F3F7FF;
-                border-color: #9EB4E0;
+                background: #EEF4FF;
             }}
 
             .pill-giunti {{
-                background: #F5FBF5;
-                border-color: #9CC59C;
+                background: #F1FAF1;
             }}
 
             .stMarkdown p, .stCaption, label, .stSelectbox label, .stTextInput label,
@@ -248,14 +255,14 @@ def inject_global_css():
             .stTextArea label p,
             .stFileUploader label p,
             .stCheckbox label p {{
-                font-size: 1.02rem !important;
-                font-weight: 700 !important;
+                font-size: 1.06rem !important;
+                font-weight: 800 !important;
                 color: var(--text) !important;
             }}
 
             [data-testid="stMetricLabel"] {{
                 font-size: 1rem !important;
-                font-weight: 700 !important;
+                font-weight: 800 !important;
             }}
 
             [data-testid="stMetricValue"] {{
@@ -272,7 +279,7 @@ def inject_global_css():
             [data-testid="stDataFrame"],
             [data-testid="stTable"] {{
                 background: var(--field-bg) !important;
-                border: 2px solid var(--border) !important;
+                border: 2px solid var(--border-strong) !important;
                 border-radius: 12px !important;
             }}
 
@@ -280,55 +287,53 @@ def inject_global_css():
             .stNumberInput input,
             .stTextArea textarea {{
                 color: var(--text) !important;
-                font-size: 1.02rem !important;
+                font-size: 1.04rem !important;
             }}
 
             .stButton > button {{
                 background: white !important;
                 color: var(--text) !important;
-                border: 2px solid var(--border) !important;
+                border: 2px solid var(--border-strong) !important;
                 border-radius: 12px !important;
-                font-size: 1.02rem !important;
-                font-weight: 700 !important;
+                font-size: 1.04rem !important;
+                font-weight: 800 !important;
                 min-height: 46px;
             }}
 
             .stButton > button[kind="primary"] {{
                 background: #FFF4F4 !important;
-                border: 2px solid #C99292 !important;
-            }}
-
-            .stDownloadButton > button {{
-                border: 2px solid var(--border) !important;
-                border-radius: 12px !important;
-                font-size: 1.02rem !important;
-                font-weight: 700 !important;
-                min-height: 46px;
+                border: 2px solid #C07F7F !important;
             }}
 
             .stCheckbox label {{
-                font-size: 1.02rem !important;
-                font-weight: 700 !important;
+                font-size: 1.04rem !important;
+                font-weight: 800 !important;
             }}
 
             details {{
                 background: white;
-                border: 2px solid var(--border);
+                border: 2px solid var(--border-strong);
                 border-radius: 12px;
                 padding: 6px 10px;
             }}
 
             .table-title {{
-                font-size: 1.3rem;
+                font-size: 1.32rem;
                 font-weight: 800;
                 color: var(--text);
                 margin-bottom: 0.6rem;
             }}
 
             .small-legend {{
-                font-size: 0.95rem;
+                font-size: 0.97rem;
                 color: var(--muted);
                 margin-top: -4px;
+                margin-bottom: 10px;
+            }}
+
+            .separator-help {{
+                font-size: 0.96rem;
+                color: var(--muted);
                 margin-bottom: 10px;
             }}
         </style>
@@ -338,36 +343,30 @@ def inject_global_css():
 
 
 def render_header():
+    st.markdown('<div class="main-header-box">', unsafe_allow_html=True)
+    col_logo, col_text = st.columns([1, 5])
+    with col_logo:
+        st.image(LOGO_URL, width=150)
+    with col_text:
+        st.markdown(
+            """
+            <p class="main-header-title">DASHBOARD ADMIN</p>
+            <p class="main-header-subtitle">presenze e pagamenti automatizzati</p>
+            """,
+            unsafe_allow_html=True,
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_page_title(title: str):
     st.markdown(
         f"""
-        <div class="main-header-wrap">
-            <div style="display:flex; align-items:center; gap:18px; flex-wrap:wrap;">
-                <div>
-                    <img src="{LOGO_URL}" style="height:72px; object-fit:contain;">
-                </div>
-                <div>
-                    <p class="main-header-title">DASHBOARD ADMIN</p>
-                    <p class="main-header-subtitle">presenze e pagamenti automatizzati</p>
-                </div>
-            </div>
+        <div class="page-title-box">
+            <p class="section-title">{title}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-
-def open_section_box(title: str):
-    st.markdown(
-        f"""
-        <div class="section-box">
-            <div class="section-title">{title}</div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def close_section_box():
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # =========================
@@ -450,9 +449,9 @@ def style_presence_preview(df: pd.DataFrame):
     def row_style(row):
         stato = normalize_upper(row.get("STATO_RIGA", ""))
         if stato == "ASSENZA":
-            return ["background-color: #FBE7E7; color: #243241;"] * len(row)
+            return ["background-color: #F7E3E3; color: #243241;"] * len(row)
         if stato == "SOSTITUZIONE":
-            return ["background-color: #EAF2FF; color: #243241;"] * len(row)
+            return ["background-color: #E6F0FF; color: #243241;"] * len(row)
         return [""] * len(row)
 
     return df.style.apply(row_style, axis=1)
@@ -501,8 +500,7 @@ def build_generation_table(df_edicola: pd.DataFrame, df_libri: pd.DataFrame) -> 
     righe = []
 
     if not df_edicola.empty:
-        ed = df_edicola.copy()
-        for _, row in ed.iterrows():
+        for _, row in df_edicola.iterrows():
             righe.append(
                 {
                     "NOME": normalize_text(row["MHS_TITOLARE"]),
@@ -520,8 +518,7 @@ def build_generation_table(df_edicola: pd.DataFrame, df_libri: pd.DataFrame) -> 
             )
 
     if not df_libri.empty:
-        lb = df_libri.copy()
-        for _, row in lb.iterrows():
+        for _, row in df_libri.iterrows():
             righe.append(
                 {
                     "NOME": normalize_text(row["MHS_TITOLARE"]),
@@ -711,7 +708,12 @@ def apply_step3_rules(tabella: pd.DataFrame, netto_ora: float, societa: str) -> 
             if safe_float(df.at[idx, ore_col]) > 0 and normalize_text(df.at[idx, assenza_col]) != "":
                 df.at[idx, assenza_col] = ""
 
-            df.at[idx, euro_col] = calculate_row_amount(df.at[idx, ore_col], netto_ora, bool(df.at[idx, "FESTIVO"]), societa)
+            df.at[idx, euro_col] = calculate_row_amount(
+                df.at[idx, ore_col],
+                netto_ora,
+                bool(df.at[idx, "FESTIVO"]),
+                societa,
+            )
 
         base_tot = round(
             safe_float(df.at[idx, "BASE_EDICOLA_ORE"])
@@ -827,6 +829,7 @@ def ensure_session_state():
         "fogli_generati": {},
         "foglio_attivo": None,
         "master_loaded": False,
+        "sheet_warnings": {},
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -838,7 +841,8 @@ def ensure_session_state():
 # =========================
 
 def render_master_page():
-    open_section_box("1. Caricamento master reali")
+    render_page_title("1. Caricamento master reali")
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -903,15 +907,16 @@ def render_master_page():
             st.write(list(st.session_state["df_spot"].columns))
             st.dataframe(st.session_state["df_spot"].head(10), use_container_width=True)
 
-    close_section_box()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_generation_page():
-    open_section_box("2. Generazione fogli presenze")
+    render_page_title("2. Generazione fogli presenze")
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
 
     if not st.session_state["master_loaded"]:
         st.warning("Prima carica e verifica i master nella sezione 'Caricamento master'.")
-        close_section_box()
+        st.markdown("</div>", unsafe_allow_html=True)
         return
 
     col1, col2 = st.columns([1, 1])
@@ -925,7 +930,7 @@ def render_generation_page():
     generation_table = st.session_state["generation_table"].copy()
     if generation_table.empty:
         st.warning("Nessuna riga disponibile per la generazione dei fogli.")
-        close_section_box()
+        st.markdown("</div>", unsafe_allow_html=True)
         return
 
     if filtro_nome.strip():
@@ -934,7 +939,7 @@ def render_generation_page():
 
     if generation_table.empty:
         st.info("Nessun risultato trovato con il filtro inserito.")
-        close_section_box()
+        st.markdown("</div>", unsafe_allow_html=True)
         return
 
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
@@ -966,7 +971,7 @@ def render_generation_page():
         selected = edited[edited["SELEZIONA"] == True].copy()
         if selected.empty:
             st.warning("Seleziona almeno una riga.")
-            close_section_box()
+            st.markdown("</div>", unsafe_allow_html=True)
             return
 
         for _, row in selected.iterrows():
@@ -982,15 +987,16 @@ def render_generation_page():
 
         st.success("Fogli presenze generati correttamente.")
 
-    close_section_box()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_sheet_page():
-    open_section_box("3. Gestione foglio presenze")
+    render_page_title("3. Gestione foglio presenze")
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
 
     if not st.session_state["fogli_generati"]:
         st.warning("Prima genera almeno un foglio nella sezione 'Generazione fogli'.")
-        close_section_box()
+        st.markdown("</div>", unsafe_allow_html=True)
         return
 
     keys = list(st.session_state["fogli_generati"].keys())
@@ -1072,12 +1078,31 @@ def render_sheet_page():
         unsafe_allow_html=True,
     )
 
-    editable_df = record["tabella"].copy()
-    editor_key = f"editor_tabella_{selected_key}"
+    visible_cols = [
+        "GIORNO_NUM",
+        "DATA",
+        "GIORNO_SETTIMANA",
+        "EDICOLA_ORE",
+        "EDICOLA_€",
+        "EDICOLA_TIPO_ASSENZA",
+        "SEP_1",
+        "MONDADORI_ORE",
+        "MONDADORI_€",
+        "MONDADORI_TIPO_ASSENZA",
+        "SEP_2",
+        "GIUNTI_ORE",
+        "GIUNTI_€",
+        "GIUNTI_TIPO_ASSENZA",
+        "FESTIVO",
+    ]
 
-    visible_cols = COLONNE_TABELLA
+    display_df = record["tabella"][COLONNE_TABELLA].copy().reset_index(drop=True)
+    display_df.insert(6, "SEP_1", "│")
+    display_df.insert(10, "SEP_2", "│")
+
+    editor_key = f"editor_tabella_{selected_key}"
     edited = st.data_editor(
-        editable_df[visible_cols],
+        display_df[visible_cols],
         hide_index=True,
         use_container_width=True,
         num_rows="fixed",
@@ -1089,9 +1114,11 @@ def render_sheet_page():
             "EDICOLA_ORE": st.column_config.NumberColumn("Edicola Ore", min_value=0.0, step=0.5, format="%.2f"),
             "EDICOLA_€": st.column_config.NumberColumn("Edicola €", format="%.2f €", disabled=True),
             "EDICOLA_TIPO_ASSENZA": st.column_config.SelectboxColumn("Edicola Tipo assenza", options=TIPI_ASSENZA),
+            "SEP_1": st.column_config.TextColumn("│", disabled=True),
             "MONDADORI_ORE": st.column_config.NumberColumn("Mondadori Ore", min_value=0.0, step=0.5, format="%.2f"),
             "MONDADORI_€": st.column_config.NumberColumn("Mondadori €", format="%.2f €", disabled=True),
             "MONDADORI_TIPO_ASSENZA": st.column_config.SelectboxColumn("Mondadori Tipo assenza", options=TIPI_ASSENZA),
+            "SEP_2": st.column_config.TextColumn("│", disabled=True),
             "GIUNTI_ORE": st.column_config.NumberColumn("Giunti Ore", min_value=0.0, step=0.5, format="%.2f"),
             "GIUNTI_€": st.column_config.NumberColumn("Giunti €", format="%.2f €", disabled=True),
             "GIUNTI_TIPO_ASSENZA": st.column_config.SelectboxColumn("Giunti Tipo assenza", options=TIPI_ASSENZA),
@@ -1100,16 +1127,29 @@ def render_sheet_page():
         key=editor_key,
     )
 
-    if not locked:
-        hidden_cols = record["tabella"][COLONNE_BASE_ORE + ["STATO_RIGA"]].copy().reset_index(drop=True)
-        merged = pd.concat([edited.reset_index(drop=True), hidden_cols], axis=1)
-        merged, warnings = apply_step3_rules(merged, record["netto_ora"], record["societa"])
-        record["tabella"] = merged
-        update_sheet_totals(record)
+    warning_map = st.session_state["sheet_warnings"]
+    if selected_key in warning_map and warning_map[selected_key]:
+        for msg in warning_map[selected_key]:
+            st.warning(msg)
 
-        if warnings:
-            for msg in warnings:
-                st.warning(msg)
+    if not locked:
+        edited_clean = edited.drop(columns=["SEP_1", "SEP_2"]).reset_index(drop=True)
+        hidden_cols = record["tabella"][COLONNE_BASE_ORE + ["STATO_RIGA"]].copy().reset_index(drop=True)
+        merged = pd.concat([edited_clean, hidden_cols], axis=1)
+        merged, warnings = apply_step3_rules(merged, record["netto_ora"], record["societa"])
+
+        current_visible = record["tabella"][COLONNE_TABELLA].reset_index(drop=True)
+        new_visible = merged[COLONNE_TABELLA].reset_index(drop=True)
+
+        if not new_visible.equals(current_visible):
+            record["tabella"] = merged
+            st.session_state["sheet_warnings"][selected_key] = warnings
+            update_sheet_totals(record)
+            st.rerun()
+        else:
+            record["tabella"] = merged
+            st.session_state["sheet_warnings"][selected_key] = warnings
+            update_sheet_totals(record)
     else:
         update_sheet_totals(record)
 
@@ -1122,6 +1162,7 @@ def render_sheet_page():
         record["rimborso"] = 0.0
         record["rimborso_allegati"] = []
         record["note_generali"] = ""
+        st.session_state["sheet_warnings"][selected_key] = []
         update_sheet_totals(record)
         st.rerun()
 
@@ -1186,7 +1227,7 @@ def render_sheet_page():
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
     st.markdown('<div class="table-title">Evidenziazione righe</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="small-legend">Anteprima variazioni rilevate dal sistema. Questa tabella verrà rivalutata nella seconda riscrittura.</div>',
+        '<div class="small-legend">Anteprima variazioni rilevate dal sistema. Questa tabella verrà eliminata nell’ultima riscrittura.</div>',
         unsafe_allow_html=True,
     )
 
@@ -1200,7 +1241,7 @@ def render_sheet_page():
     st.dataframe(style_presence_preview(preview_df), use_container_width=True, hide_index=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    close_section_box()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # =========================
@@ -1212,14 +1253,9 @@ inject_global_css()
 render_header()
 
 with st.sidebar:
-    st.markdown(
-        f"""
-        <div class="sidebar-logo-wrap">
-            <img src="{LOGO_URL}" style="width:170px; max-width:100%; object-fit:contain;">
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="sidebar-logo-wrap">', unsafe_allow_html=True)
+    st.image(LOGO_URL, width=170)
+    st.markdown("</div>", unsafe_allow_html=True)
 
     sezione = st.radio(
         "Sezioni operative",
