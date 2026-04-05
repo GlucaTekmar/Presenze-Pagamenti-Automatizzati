@@ -7,8 +7,14 @@ import streamlit as st
 
 st.set_page_config(page_title="Presenze e Pagamenti Automatizzati", layout="wide")
 
-LOGO_URL = "https://drive.google.com/uc?export=view&id=1hRhNV-CTjKPh8F-d831lc8vznSi-rKYB"
+LOGO_URL = "https://raw.githubusercontent.com/GlucaTekmar/operativita-pdv/refs/heads/main/logo.png"
 COLOR_ROSSO = "#C62828"
+BG_APP = "#EEF1F4"
+BG_BOX = "#F7F8FA"
+BG_FIELD = "#FFFFFF"
+BORDER_COLOR = "#AEB7C2"
+TEXT_COLOR = "#1E2A36"
+TEXT_MUTED = "#4E5D6C"
 GIORNI_SETTIMANA = ["LUN", "MAR", "MER", "GIO", "VEN", "SAB", "DOM"]
 MESI = {
     1: "Gennaio",
@@ -86,68 +92,282 @@ HEADER_ALIASES = {
 # STILE
 # =========================
 
-def render_header():
+def inject_global_css():
     st.markdown(
         f"""
         <style>
+            :root {{
+                --app-bg: {BG_APP};
+                --box-bg: {BG_BOX};
+                --field-bg: {BG_FIELD};
+                --border: {BORDER_COLOR};
+                --text: {TEXT_COLOR};
+                --muted: {TEXT_MUTED};
+                --red: {COLOR_ROSSO};
+            }}
+
+            html, body, [class*="css"], .stApp {{
+                color: var(--text);
+                font-size: 16px !important;
+            }}
+
+            .stApp {{
+                background: var(--app-bg);
+            }}
+
             .block-container {{
                 padding-top: 1.0rem;
                 padding-bottom: 2rem;
+                max-width: 96%;
             }}
-            .app-box {{
-                border: 1px solid #D9D9D9;
-                border-radius: 12px;
-                padding: 14px;
-                background: #FFFFFF;
+
+            section[data-testid="stSidebar"] {{
+                background: #E4E8ED !important;
+                border-right: 2px solid var(--border);
+            }}
+
+            section[data-testid="stSidebar"] * {{
+                font-size: 17px !important;
+                color: var(--text) !important;
+            }}
+
+            .sidebar-logo-wrap {{
+                padding-top: 4px;
+                padding-bottom: 10px;
+                border-bottom: 2px solid var(--border);
                 margin-bottom: 12px;
             }}
-            .titolo-admin {{
-                font-size: 1.8rem;
-                font-weight: 700;
-                color: {COLOR_ROSSO};
+
+            .main-header-wrap {{
+                background: var(--box-bg);
+                border: 2px solid var(--border);
+                border-radius: 16px;
+                padding: 18px 20px 16px 20px;
+                margin-bottom: 18px;
+                box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+            }}
+
+            .main-header-title {{
+                font-size: 2rem;
+                font-weight: 800;
+                color: var(--red);
                 margin: 0;
+                line-height: 1.1;
             }}
-            .sottotitolo-admin {{
-                font-size: 1.05rem;
-                font-weight: 600;
-                color: #111111;
-                margin: 0.2rem 0 0.8rem 0;
-            }}
-            .sezione-titolo {{
-                font-size: 1.15rem;
+
+            .main-header-subtitle {{
+                font-size: 1.25rem;
                 font-weight: 700;
-                color: {COLOR_ROSSO};
-                margin-bottom: 0.5rem;
+                color: var(--text);
+                margin: 0.35rem 0 0 0;
             }}
-            .note-box {{
-                border-left: 4px solid {COLOR_ROSSO};
-                background: #FFF8F8;
+
+            .section-title {{
+                font-size: 1.55rem;
+                font-weight: 800;
+                color: var(--red);
+                margin-top: 0.15rem;
+                margin-bottom: 0.8rem;
+                line-height: 1.15;
+            }}
+
+            .section-box {{
+                background: var(--box-bg);
+                border: 2px solid var(--border);
+                border-radius: 16px;
+                padding: 16px;
+                margin-bottom: 16px;
+            }}
+
+            .inner-box {{
+                background: #F3F5F7;
+                border: 2px solid #BBC4CE;
+                border-radius: 14px;
+                padding: 14px;
+                margin-bottom: 14px;
+            }}
+
+            .soft-note {{
+                border-left: 4px solid var(--red);
+                background: #FFF5F5;
+                border-radius: 10px;
+                padding: 12px 14px;
+                font-size: 1rem;
+                margin-bottom: 12px;
+            }}
+
+            .activity-note {{
+                border: 2px dashed #C5CED8;
+                background: #FAFBFC;
+                border-radius: 12px;
                 padding: 10px 12px;
-                border-radius: 8px;
-                margin-bottom: 10px;
+                font-size: 0.98rem;
+                color: var(--muted);
+                margin-bottom: 12px;
             }}
+
+            .activity-legend {{
+                display: flex;
+                gap: 10px;
+                flex-wrap: wrap;
+                margin-top: 8px;
+            }}
+
+            .activity-pill {{
+                border-radius: 999px;
+                padding: 6px 12px;
+                font-size: 0.95rem;
+                font-weight: 700;
+                border: 2px solid var(--border);
+                background: white;
+            }}
+
+            .pill-edicola {{
+                background: #FFF2F2;
+                border-color: #D8A0A0;
+            }}
+
+            .pill-mondadori {{
+                background: #F3F7FF;
+                border-color: #9EB4E0;
+            }}
+
+            .pill-giunti {{
+                background: #F5FBF5;
+                border-color: #9CC59C;
+            }}
+
+            .stMarkdown p, .stCaption, label, .stSelectbox label, .stTextInput label,
+            .stNumberInput label, .stTextArea label, .stFileUploader label {{
+                font-size: 1rem !important;
+            }}
+
+            .stSelectbox label p,
+            .stTextInput label p,
+            .stNumberInput label p,
+            .stTextArea label p,
+            .stFileUploader label p,
+            .stCheckbox label p {{
+                font-size: 1.02rem !important;
+                font-weight: 700 !important;
+                color: var(--text) !important;
+            }}
+
+            [data-testid="stMetricLabel"] {{
+                font-size: 1rem !important;
+                font-weight: 700 !important;
+            }}
+
+            [data-testid="stMetricValue"] {{
+                font-size: 2rem !important;
+                font-weight: 800 !important;
+                color: var(--text) !important;
+            }}
+
+            div[data-baseweb="select"] > div,
+            .stTextInput input,
+            .stNumberInput input,
+            .stTextArea textarea,
+            [data-testid="stFileUploaderDropzone"],
+            [data-testid="stDataFrame"],
+            [data-testid="stTable"] {{
+                background: var(--field-bg) !important;
+                border: 2px solid var(--border) !important;
+                border-radius: 12px !important;
+            }}
+
+            .stTextInput input,
+            .stNumberInput input,
+            .stTextArea textarea {{
+                color: var(--text) !important;
+                font-size: 1.02rem !important;
+            }}
+
             .stButton > button {{
-                border: 1px solid #CFCFCF;
+                background: white !important;
+                color: var(--text) !important;
+                border: 2px solid var(--border) !important;
+                border-radius: 12px !important;
+                font-size: 1.02rem !important;
+                font-weight: 700 !important;
+                min-height: 46px;
+            }}
+
+            .stButton > button[kind="primary"] {{
+                background: #FFF4F4 !important;
+                border: 2px solid #C99292 !important;
+            }}
+
+            .stDownloadButton > button {{
+                border: 2px solid var(--border) !important;
+                border-radius: 12px !important;
+                font-size: 1.02rem !important;
+                font-weight: 700 !important;
+                min-height: 46px;
+            }}
+
+            .stCheckbox label {{
+                font-size: 1.02rem !important;
+                font-weight: 700 !important;
+            }}
+
+            details {{
+                background: white;
+                border: 2px solid var(--border);
+                border-radius: 12px;
+                padding: 6px 10px;
+            }}
+
+            .table-title {{
+                font-size: 1.3rem;
+                font-weight: 800;
+                color: var(--text);
+                margin-bottom: 0.6rem;
+            }}
+
+            .small-legend {{
+                font-size: 0.95rem;
+                color: var(--muted);
+                margin-top: -4px;
+                margin-bottom: 10px;
             }}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    logo_html = ""
-    if LOGO_URL.strip():
-        logo_html = f'<img src="{LOGO_URL}" style="max-height:72px; margin-bottom:10px;">'
 
+def render_header():
     st.markdown(
         f"""
-        <div>
-            {logo_html}
-            <p class="titolo-admin">DASHBOARD ADMIN</p>
-            <p class="sottotitolo-admin">presenze e pagamenti automatizzati</p>
+        <div class="main-header-wrap">
+            <div style="display:flex; align-items:center; gap:18px; flex-wrap:wrap;">
+                <div>
+                    <img src="{LOGO_URL}" style="height:72px; object-fit:contain;">
+                </div>
+                <div>
+                    <p class="main-header-title">DASHBOARD ADMIN</p>
+                    <p class="main-header-subtitle">presenze e pagamenti automatizzati</p>
+                </div>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+
+def open_section_box(title: str):
+    st.markdown(
+        f"""
+        <div class="section-box">
+            <div class="section-title">{title}</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def close_section_box():
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # =========================
@@ -230,9 +450,9 @@ def style_presence_preview(df: pd.DataFrame):
     def row_style(row):
         stato = normalize_upper(row.get("STATO_RIGA", ""))
         if stato == "ASSENZA":
-            return ["background-color: #FDECEC"] * len(row)
+            return ["background-color: #FBE7E7; color: #243241;"] * len(row)
         if stato == "SOSTITUZIONE":
-            return ["background-color: #EAF2FF"] * len(row)
+            return ["background-color: #EAF2FF; color: #243241;"] * len(row)
         return [""] * len(row)
 
     return df.style.apply(row_style, axis=1)
@@ -282,7 +502,6 @@ def build_generation_table(df_edicola: pd.DataFrame, df_libri: pd.DataFrame) -> 
 
     if not df_edicola.empty:
         ed = df_edicola.copy()
-        ed["FONTE"] = "EDICOLA"
         for _, row in ed.iterrows():
             righe.append(
                 {
@@ -302,7 +521,6 @@ def build_generation_table(df_edicola: pd.DataFrame, df_libri: pd.DataFrame) -> 
 
     if not df_libri.empty:
         lb = df_libri.copy()
-        lb["FONTE"] = "LIBRI"
         for _, row in lb.iterrows():
             righe.append(
                 {
@@ -620,7 +838,7 @@ def ensure_session_state():
 # =========================
 
 def render_master_page():
-    st.markdown('<div class="sezione-titolo">1. Caricamento master reali</div>', unsafe_allow_html=True)
+    open_section_box("1. Caricamento master reali")
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -685,12 +903,15 @@ def render_master_page():
             st.write(list(st.session_state["df_spot"].columns))
             st.dataframe(st.session_state["df_spot"].head(10), use_container_width=True)
 
+    close_section_box()
+
 
 def render_generation_page():
-    st.markdown('<div class="sezione-titolo">2. Generazione fogli presenze</div>', unsafe_allow_html=True)
+    open_section_box("2. Generazione fogli presenze")
 
     if not st.session_state["master_loaded"]:
         st.warning("Prima carica e verifica i master nella sezione 'Caricamento master'.")
+        close_section_box()
         return
 
     col1, col2 = st.columns([1, 1])
@@ -704,6 +925,7 @@ def render_generation_page():
     generation_table = st.session_state["generation_table"].copy()
     if generation_table.empty:
         st.warning("Nessuna riga disponibile per la generazione dei fogli.")
+        close_section_box()
         return
 
     if filtro_nome.strip():
@@ -712,8 +934,10 @@ def render_generation_page():
 
     if generation_table.empty:
         st.info("Nessun risultato trovato con il filtro inserito.")
+        close_section_box()
         return
 
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
     edited = st.data_editor(
         generation_table,
         hide_index=True,
@@ -736,11 +960,13 @@ def render_generation_page():
         },
         key="editor_generation_table",
     )
+    st.markdown("</div>", unsafe_allow_html=True)
 
     if st.button("Genera fogli presenze selezionati", type="primary", use_container_width=True):
         selected = edited[edited["SELEZIONA"] == True].copy()
         if selected.empty:
             st.warning("Seleziona almeno una riga.")
+            close_section_box()
             return
 
         for _, row in selected.iterrows():
@@ -756,12 +982,15 @@ def render_generation_page():
 
         st.success("Fogli presenze generati correttamente.")
 
+    close_section_box()
+
 
 def render_sheet_page():
-    st.markdown('<div class="sezione-titolo">3. Gestione foglio presenze</div>', unsafe_allow_html=True)
+    open_section_box("3. Gestione foglio presenze")
 
     if not st.session_state["fogli_generati"]:
         st.warning("Prima genera almeno un foglio nella sezione 'Generazione fogli'.")
+        close_section_box()
         return
 
     keys = list(st.session_state["fogli_generati"].keys())
@@ -783,6 +1012,8 @@ def render_sheet_page():
     record = st.session_state["fogli_generati"][selected_key]
 
     locked = record["lucchetto_mese"] or record["lucchetto_foglio"]
+
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
 
     col_h1, col_h2, col_h3, col_h4 = st.columns(4)
     with col_h1:
@@ -820,10 +1051,26 @@ def render_sheet_page():
     with col_lock2:
         record["lucchetto_mese"] = st.checkbox("Lucchetto mese", value=record["lucchetto_mese"])
 
+    st.markdown("</div>", unsafe_allow_html=True)
+
     locked = record["lucchetto_mese"] or record["lucchetto_foglio"]
 
-    st.markdown("#### Corpo foglio presenze")
-    st.caption("Nel corpo foglio sono consentiti solo: invariato, riduzione ore, azzeramento ore. Aumento ore non consentito nello STEP 3.")
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+    st.markdown('<div class="table-title">Corpo foglio presenze</div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="activity-note">
+            Nel corpo foglio sono consentiti solo: invariato, riduzione ore, azzeramento ore.
+            Aumento ore non consentito nello STEP 3.
+            <div class="activity-legend">
+                <span class="activity-pill pill-edicola">EDICOLA</span>
+                <span class="activity-pill pill-mondadori">MONDADORI</span>
+                <span class="activity-pill pill-giunti">GIUNTI</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     editable_df = record["tabella"].copy()
     editor_key = f"editor_tabella_{selected_key}"
@@ -866,21 +1113,23 @@ def render_sheet_page():
     else:
         update_sheet_totals(record)
 
-    col_reset1, col_reset2 = st.columns([1, 2])
-    with col_reset1:
-        if st.button("Azzera foglio corrente", disabled=locked, use_container_width=True):
-            record["tabella"] = deepcopy(record["originale_step3"])
-            record["arretrati"] = 0.0
-            record["extra"] = 0.0
-            record["affiancamenti"] = 0.0
-            record["domeniche"] = 0.0
-            record["rimborso"] = 0.0
-            record["rimborso_allegati"] = []
-            record["note_generali"] = ""
-            update_sheet_totals(record)
-            st.rerun()
+    if st.button("Azzera foglio corrente", disabled=locked, use_container_width=True):
+        record["tabella"] = deepcopy(record["originale_step3"])
+        record["arretrati"] = 0.0
+        record["extra"] = 0.0
+        record["affiancamenti"] = 0.0
+        record["domeniche"] = 0.0
+        record["rimborso"] = 0.0
+        record["rimborso_allegati"] = []
+        record["note_generali"] = ""
+        update_sheet_totals(record)
+        st.rerun()
 
-    st.markdown("#### Fondo foglio")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+    st.markdown('<div class="table-title">Fondo foglio</div>', unsafe_allow_html=True)
+
     col_b1, col_b2, col_b3, col_b4, col_b5 = st.columns(5)
     with col_b1:
         record["arretrati"] = st.number_input("€ arretrato", value=float(record["arretrati"]), step=0.50, disabled=locked)
@@ -913,13 +1162,16 @@ def render_sheet_page():
     )
 
     update_sheet_totals(record)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("#### Totale finale")
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+    st.markdown('<div class="table-title">Totale finale</div>', unsafe_allow_html=True)
+
     col_t1, col_t2 = st.columns([2, 1])
     with col_t1:
         st.markdown(
-            f"""
-            <div class="note-box">
+            """
+            <div class="soft-note">
                 <b>Formula STEP 3</b><br>
                 TOT NETTO MESE = Tot attività + Arretrati + Extra + Affiancamenti + Domeniche + Rimborsi
             </div>
@@ -929,7 +1181,15 @@ def render_sheet_page():
     with col_t2:
         st.metric("TOT NETTO MESE", f"€ {record['tot_netto_mese']:.2f}")
 
-    st.markdown("#### Evidenziazione righe")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+    st.markdown('<div class="table-title">Evidenziazione righe</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="small-legend">Anteprima variazioni rilevate dal sistema. Questa tabella verrà rivalutata nella seconda riscrittura.</div>',
+        unsafe_allow_html=True,
+    )
+
     preview_df = record["tabella"][[
         "GIORNO_NUM", "DATA", "GIORNO_SETTIMANA",
         "EDICOLA_ORE", "EDICOLA_TIPO_ASSENZA",
@@ -938,6 +1198,9 @@ def render_sheet_page():
         "FESTIVO", "STATO_RIGA"
     ]].copy()
     st.dataframe(style_presence_preview(preview_df), use_container_width=True, hide_index=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    close_section_box()
 
 
 # =========================
@@ -945,10 +1208,19 @@ def render_sheet_page():
 # =========================
 
 ensure_session_state()
+inject_global_css()
 render_header()
 
 with st.sidebar:
-    st.image(LOGO_URL, width=160)
+    st.markdown(
+        f"""
+        <div class="sidebar-logo-wrap">
+            <img src="{LOGO_URL}" style="width:170px; max-width:100%; object-fit:contain;">
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     sezione = st.radio(
         "Sezioni operative",
         [
