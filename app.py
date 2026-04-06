@@ -8,6 +8,7 @@ import streamlit as st
 st.set_page_config(page_title="Presenze e Pagamenti Automatizzati", layout="wide")
 
 LOGO_URL = "https://raw.githubusercontent.com/GlucaTekmar/operativita-pdv/refs/heads/main/logo.png"
+
 COLOR_ROSSO = "#C62828"
 BG_APP = "#EEF1F4"
 BG_BOX = "#F7F8FA"
@@ -53,28 +54,6 @@ COLONNE_MASTER_SPOT = [
     "TIPO_CONTRATTO", "SCADENZA_CONTRATTO",
 ]
 
-COLONNE_TABELLA = [
-    "GIORNO_NUM",
-    "DATA",
-    "GIORNO_SETTIMANA",
-    "EDICOLA_ORE",
-    "EDICOLA_€",
-    "EDICOLA_TIPO_ASSENZA",
-    "MONDADORI_ORE",
-    "MONDADORI_€",
-    "MONDADORI_TIPO_ASSENZA",
-    "GIUNTI_ORE",
-    "GIUNTI_€",
-    "GIUNTI_TIPO_ASSENZA",
-    "FESTIVO",
-]
-
-COLONNE_BASE_ORE = [
-    "BASE_EDICOLA_ORE",
-    "BASE_MONDADORI_ORE",
-    "BASE_GIUNTI_ORE",
-]
-
 HEADER_ALIASES = {
     "CODICE_FISCALE": "COD_FISCALE",
     "CF": "COD_FISCALE",
@@ -88,6 +67,36 @@ HEADER_ALIASES = {
     "TIPO LIBRI": "TIPO_LIBRI",
     "ELEMENTI BANCO": "ELEMENTI_BANCO",
 }
+
+ORIGINE_EDICOLA = "EDICOLA"
+ORIGINE_LIBRI = "LIBRI"
+
+COLONNE_BASE_ALL = [
+    "BASE_EDICOLA_ORE",
+    "BASE_MONDADORI_ORE",
+    "BASE_GIUNTI_ORE",
+]
+
+COLONNE_TABELLA_TECNICHE = [
+    "GIORNO_NUM",
+    "DATA",
+    "GIORNO_SETTIMANA",
+    "DATA_VIEW",
+    "EDICOLA_ORE",
+    "EDICOLA_€",
+    "EDICOLA_TIPO_ASSENZA",
+    "MONDADORI_ORE",
+    "MONDADORI_€",
+    "MONDADORI_TIPO_ASSENZA",
+    "GIUNTI_ORE",
+    "GIUNTI_€",
+    "GIUNTI_TIPO_ASSENZA",
+    "FESTIVO",
+    "ROW_STATUS",
+    "BASE_EDICOLA_ORE",
+    "BASE_MONDADORI_ORE",
+    "BASE_GIUNTI_ORE",
+]
 
 
 # =========================
@@ -324,10 +333,14 @@ def inject_global_css():
                 margin-bottom: 0.6rem;
             }}
 
-            .small-legend {{
-                font-size: 0.97rem;
-                color: var(--muted);
-                margin-top: -4px;
+            .warning-box {{
+                background: #FDECEC;
+                border: 2px solid #D9534F;
+                color: #8B0000;
+                border-radius: 12px;
+                padding: 12px 14px;
+                font-size: 1rem;
+                font-weight: 800;
                 margin-bottom: 10px;
             }}
 
@@ -365,6 +378,13 @@ def render_page_title(title: str):
             <p class="section-title">{title}</p>
         </div>
         """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_warning_box(message: str):
+    st.markdown(
+        f'<div class="warning-box">ATTENZIONE — {message}</div>',
         unsafe_allow_html=True,
     )
 
@@ -441,20 +461,12 @@ def calculate_row_amount(ore: float, netto_ora: float, festivo: bool, agenzia: s
     return base
 
 
-def format_sheet_key(cod_fiscale: str, societa: str, pdv: str, anno: int, mese: int) -> str:
-    return f"{normalize_upper(cod_fiscale)}__{normalize_upper(societa)}__{normalize_upper(pdv)}__{anno}__{mese:02d}"
+def format_sheet_key(row_id: str, anno: int, mese: int) -> str:
+    return f"{row_id}__{anno}__{mese:02d}"
 
 
-def style_presence_preview(df: pd.DataFrame):
-    def row_style(row):
-        stato = normalize_upper(row.get("STATO_RIGA", ""))
-        if stato == "ASSENZA":
-            return ["background-color: #F7E3E3; color: #243241;"] * len(row)
-        if stato == "SOSTITUZIONE":
-            return ["background-color: #E6F0FF; color: #243241;"] * len(row)
-        return [""] * len(row)
-
-    return df.style.apply(row_style, axis=1)
+def format_scadenza(value: str) -> str:
+    return normalize_text(value)
 
 
 # =========================
@@ -493,90 +505,68 @@ def normalize_master_spot(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # =========================
-# COSTRUZIONE RIGHE GENERAZIONE
+# RIGHE SELEZIONE SENZA RAGGRUPPAMENTO
 # =========================
 
 def build_generation_table(df_edicola: pd.DataFrame, df_libri: pd.DataFrame) -> pd.DataFrame:
     righe = []
 
-    if not df_edicola.empty:
-        for _, row in df_edicola.iterrows():
-            righe.append(
-                {
-                    "NOME": normalize_text(row["MHS_TITOLARE"]),
-                    "COD_FISCALE": normalize_text(row["COD_FISCALE"]),
-                    "SOCIETA": normalize_text(row["AGENZIA"]),
-                    "PDV": normalize_text(row["PDV"]),
-                    "TELEFONO": normalize_text(row["TEL_MHS"]),
-                    "EMAIL": normalize_text(row["MAIL_MHS"]),
-                    "NETTO_ORA": safe_float(row["NETTO_ORA"]),
-                    "NETTO_MESE": safe_float(row["COMPENSO_MENSILE"]),
-                    "TIPO_CONTRATTO": normalize_text(row["TIPO_CONTRATTO"]),
-                    "SCADENZA_CONTRATTO": normalize_text(row["SCADENZA_CONTRATTO"]),
-                    "FONTE": "EDICOLA",
-                }
-            )
-
-    if not df_libri.empty:
-        for _, row in df_libri.iterrows():
-            righe.append(
-                {
-                    "NOME": normalize_text(row["MHS_TITOLARE"]),
-                    "COD_FISCALE": normalize_text(row["COD_FISCALE"]),
-                    "SOCIETA": normalize_text(row["AGENZIA"]),
-                    "PDV": normalize_text(row["PDV"]),
-                    "TELEFONO": normalize_text(row["TEL_MHS"]),
-                    "EMAIL": normalize_text(row["MAIL_MHS"]),
-                    "NETTO_ORA": safe_float(row["NETTO_ORA"]),
-                    "NETTO_MESE": 0.0,
-                    "TIPO_CONTRATTO": normalize_text(row["TIPO_CONTRATTO"]),
-                    "SCADENZA_CONTRATTO": normalize_text(row["SCADENZA_CONTRATTO"]),
-                    "FONTE": "LIBRI",
-                }
-            )
-
-    base = pd.DataFrame(righe)
-    if base.empty:
-        return base
-
-    base["CHIAVE_BASE"] = base.apply(
-        lambda row: f"{normalize_upper(row['COD_FISCALE'])}__{normalize_upper(row['SOCIETA'])}__{normalize_upper(row['PDV'])}",
-        axis=1,
-    )
-
-    righe_finali = []
-    for _, group in base.groupby("CHIAVE_BASE", dropna=False):
-        first = group.iloc[0]
-        netto_ora_list = [safe_float(v) for v in group["NETTO_ORA"].tolist() if safe_float(v) > 0]
-        netto_mese_list = [safe_float(v) for v in group["NETTO_MESE"].tolist() if safe_float(v) > 0]
-        tipo_list = [normalize_text(v) for v in group["TIPO_CONTRATTO"].tolist() if normalize_text(v)]
-        scadenza_list = [normalize_text(v) for v in group["SCADENZA_CONTRATTO"].tolist() if normalize_text(v)]
-
-        has_edicola = "EDICOLA" in set(group["FONTE"].tolist())
-        has_libri = "LIBRI" in set(group["FONTE"].tolist())
-
-        righe_finali.append(
+    for idx, row in df_edicola.reset_index(drop=True).iterrows():
+        row_id = f"EDICOLA_{idx}"
+        righe.append(
             {
                 "SELEZIONA": False,
-                "NOME": normalize_text(first["NOME"]),
-                "COD_FISCALE": normalize_text(first["COD_FISCALE"]),
-                "SOCIETA": normalize_text(first["SOCIETA"]),
-                "PDV": normalize_text(first["PDV"]),
-                "TELEFONO": normalize_text(first["TELEFONO"]),
-                "EMAIL": normalize_text(first["EMAIL"]),
-                "NETTO_ORA": netto_ora_list[0] if netto_ora_list else 0.0,
-                "NETTO_MESE": round(sum(netto_mese_list), 2),
-                "TIPO_CONTRATTO": tipo_list[0] if tipo_list else "",
-                "SCADENZA_CONTRATTO": scadenza_list[0] if scadenza_list else "",
-                "ATTIVITA_PRESENTI": ", ".join(
-                    [att for att, ok in [("EDICOLA", has_edicola), ("LIBRI", has_libri)] if ok]
-                ),
-                "CHIAVE_BASE": normalize_text(first["CHIAVE_BASE"]),
+                "ROW_ID": row_id,
+                "ORIGINE_MASTER": ORIGINE_EDICOLA,
+                "TIPO_LIBRI": "",
+                "NOME": normalize_text(row["MHS_TITOLARE"]),
+                "COD_FISCALE": normalize_text(row["COD_FISCALE"]),
+                "SOCIETA": normalize_text(row["AGENZIA"]),
+                "PDV": normalize_text(row["PDV"]),
+                "TELEFONO": normalize_text(row["TEL_MHS"]),
+                "EMAIL": normalize_text(row["MAIL_MHS"]),
+                "NETTO_ORA": safe_float(row["NETTO_ORA"]),
+                "NETTO_MESE": safe_float(row["COMPENSO_MENSILE"]),
+                "TIPO_CONTRATTO": normalize_text(row["TIPO_CONTRATTO"]),
+                "SCADENZA_CONTRATTO": format_scadenza(row["SCADENZA_CONTRATTO"]),
+                "ATTIVITA_RIGA": "EDICOLA",
+                "MASTER_INDEX": idx,
             }
         )
 
-    result = pd.DataFrame(righe_finali)
-    result = result.sort_values(["NOME", "SOCIETA", "PDV"]).reset_index(drop=True)
+    for idx, row in df_libri.reset_index(drop=True).iterrows():
+        tipo_libri = normalize_upper(row["TIPO_LIBRI"])
+        attivita_riga = "LIBRI"
+        if tipo_libri in {"MONDADORI", "GIUNTI"}:
+            attivita_riga = f"LIBRI - {tipo_libri}"
+
+        row_id = f"LIBRI_{idx}"
+        righe.append(
+            {
+                "SELEZIONA": False,
+                "ROW_ID": row_id,
+                "ORIGINE_MASTER": ORIGINE_LIBRI,
+                "TIPO_LIBRI": normalize_text(row["TIPO_LIBRI"]),
+                "NOME": normalize_text(row["MHS_TITOLARE"]),
+                "COD_FISCALE": normalize_text(row["COD_FISCALE"]),
+                "SOCIETA": normalize_text(row["AGENZIA"]),
+                "PDV": normalize_text(row["PDV"]),
+                "TELEFONO": normalize_text(row["TEL_MHS"]),
+                "EMAIL": normalize_text(row["MAIL_MHS"]),
+                "NETTO_ORA": safe_float(row["NETTO_ORA"]),
+                "NETTO_MESE": 0.0,
+                "TIPO_CONTRATTO": normalize_text(row["TIPO_CONTRATTO"]),
+                "SCADENZA_CONTRATTO": format_scadenza(row["SCADENZA_CONTRATTO"]),
+                "ATTIVITA_RIGA": attivita_riga,
+                "MASTER_INDEX": idx,
+            }
+        )
+
+    result = pd.DataFrame(righe)
+    if result.empty:
+        return result
+
+    result = result.sort_values(["ORIGINE_MASTER", "NOME", "SOCIETA", "PDV", "TIPO_LIBRI"]).reset_index(drop=True)
     return result
 
 
@@ -584,49 +574,39 @@ def build_generation_table(df_edicola: pd.DataFrame, df_libri: pd.DataFrame) -> 
 # COSTRUZIONE FOGLIO
 # =========================
 
-def get_subset_by_key(df: pd.DataFrame, cod_fiscale: str, societa: str, pdv: str) -> pd.DataFrame:
-    if df.empty:
-        return df.copy()
-    return df[
-        (df["COD_FISCALE"].apply(normalize_upper) == normalize_upper(cod_fiscale))
-        & (df["AGENZIA"].apply(normalize_upper) == normalize_upper(societa))
-        & (df["PDV"].apply(normalize_upper) == normalize_upper(pdv))
-    ].copy()
-
-
-def sum_hours_for_day(df: pd.DataFrame, giorno_label: str) -> float:
-    if df.empty:
-        return 0.0
-    return round(df[giorno_label].apply(safe_float).sum(), 2)
-
-
-def build_presence_dataframe(
-    sub_edicola: pd.DataFrame,
-    sub_libri: pd.DataFrame,
-    netto_ora: float,
-    societa: str,
-    anno: int,
-    mese: int,
-) -> pd.DataFrame:
+def build_presence_dataframe_from_selection(row: pd.Series, anno: int, mese: int) -> pd.DataFrame:
     giorni_mese = calendar.monthrange(anno, mese)[1]
-    mondadori_df = sub_libri[sub_libri["TIPO_LIBRI"].apply(normalize_upper) == "MONDADORI"].copy()
-    giunti_df = sub_libri[sub_libri["TIPO_LIBRI"].apply(normalize_upper) == "GIUNTI"].copy()
-
     righe = []
+
+    origine = normalize_upper(row["ORIGINE_MASTER"])
+    tipo_libri = normalize_upper(row.get("TIPO_LIBRI", ""))
+    societa = normalize_text(row["SOCIETA"])
+    netto_ora = safe_float(row["NETTO_ORA"])
+
+    def get_master_hours_for_day(giorno_label: str) -> tuple[float, float, float]:
+        if origine == ORIGINE_EDICOLA:
+            return safe_float(row[giorno_label]), 0.0, 0.0
+        if origine == ORIGINE_LIBRI:
+            if tipo_libri == "MONDADORI":
+                return 0.0, safe_float(row[giorno_label]), 0.0
+            if tipo_libri == "GIUNTI":
+                return 0.0, 0.0, safe_float(row[giorno_label])
+            return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0
+
     for giorno_num in range(1, giorni_mese + 1):
         current_date = date(anno, mese, giorno_num)
         giorno_label = get_day_label(current_date)
         festivo_default = current_date.weekday() == 6
 
-        edicola_ore = sum_hours_for_day(sub_edicola, giorno_label)
-        mondadori_ore = sum_hours_for_day(mondadori_df, giorno_label)
-        giunti_ore = sum_hours_for_day(giunti_df, giorno_label)
+        edicola_ore, mondadori_ore, giunti_ore = get_master_hours_for_day(giorno_label)
 
         righe.append(
             {
                 "GIORNO_NUM": giorno_num,
                 "DATA": current_date.strftime("%d/%m/%Y"),
                 "GIORNO_SETTIMANA": giorno_label,
+                "DATA_VIEW": current_date.strftime("%d/%m/%Y"),
                 "EDICOLA_ORE": edicola_ore,
                 "EDICOLA_€": calculate_row_amount(edicola_ore, netto_ora, festivo_default, societa),
                 "EDICOLA_TIPO_ASSENZA": "",
@@ -637,49 +617,52 @@ def build_presence_dataframe(
                 "GIUNTI_€": calculate_row_amount(giunti_ore, netto_ora, festivo_default, societa),
                 "GIUNTI_TIPO_ASSENZA": "",
                 "FESTIVO": festivo_default,
+                "ROW_STATUS": "",
                 "BASE_EDICOLA_ORE": edicola_ore,
                 "BASE_MONDADORI_ORE": mondadori_ore,
                 "BASE_GIUNTI_ORE": giunti_ore,
-                "STATO_RIGA": "",
             }
         )
 
-    return pd.DataFrame(righe)
+    return pd.DataFrame(righe, columns=COLONNE_TABELLA_TECNICHE)
 
 
-def calculate_sheet_stats(df: pd.DataFrame) -> dict:
-    edicola_ore = df["EDICOLA_ORE"].apply(safe_float)
-    mondadori_ore = df["MONDADORI_ORE"].apply(safe_float)
-    giunti_ore = df["GIUNTI_ORE"].apply(safe_float)
-
-    base_edicola = df["BASE_EDICOLA_ORE"].apply(safe_float)
-    base_mondadori = df["BASE_MONDADORI_ORE"].apply(safe_float)
-    base_giunti = df["BASE_GIUNTI_ORE"].apply(safe_float)
-
-    tot_ore = round((edicola_ore + mondadori_ore + giunti_ore).sum(), 2)
-    tot_ore_azzerate = round(((base_edicola - edicola_ore) + (base_mondadori - mondadori_ore) + (base_giunti - giunti_ore)).sum(), 2)
-
-    tot_euro = round(
-        df["EDICOLA_€"].apply(safe_float).sum()
-        + df["MONDADORI_€"].apply(safe_float).sum()
-        + df["GIUNTI_€"].apply(safe_float).sum(),
+def get_row_status(df: pd.DataFrame, idx: int) -> str:
+    base_tot = round(
+        safe_float(df.at[idx, "BASE_EDICOLA_ORE"])
+        + safe_float(df.at[idx, "BASE_MONDADORI_ORE"])
+        + safe_float(df.at[idx, "BASE_GIUNTI_ORE"]),
         2,
     )
+    current_tot = round(
+        safe_float(df.at[idx, "EDICOLA_ORE"])
+        + safe_float(df.at[idx, "MONDADORI_ORE"])
+        + safe_float(df.at[idx, "GIUNTI_ORE"]),
+        2,
+    )
+    has_assenza = (
+        normalize_text(df.at[idx, "EDICOLA_TIPO_ASSENZA"]) != ""
+        or normalize_text(df.at[idx, "MONDADORI_TIPO_ASSENZA"]) != ""
+        or normalize_text(df.at[idx, "GIUNTI_TIPO_ASSENZA"]) != ""
+    )
+    if has_assenza or current_tot < base_tot:
+        return "MODIFICATA"
+    return ""
 
-    giorni_lavorati = int(((edicola_ore + mondadori_ore + giunti_ore) > 0).sum())
-    giorni_modificati = int((df["STATO_RIGA"].astype(str).str.strip() != "").sum())
 
-    return {
-        "GIORNI_LAVORATI": giorni_lavorati,
-        "GIORNI_MODIFICATI": giorni_modificati,
-        "TOT_ORE_LAVORATIVE_MESE": tot_ore,
-        "TOT_ORE_AZZERATE": tot_ore_azzerate,
-        "TOT_€_DA_SCALARE": 0.0,
-        "TOT_ATTIVITA_€": tot_euro,
-    }
+def update_data_view(df: pd.DataFrame) -> pd.DataFrame:
+    updated = df.copy()
+    for idx in updated.index:
+        base_data = normalize_text(updated.at[idx, "DATA"])
+        status = normalize_upper(updated.at[idx, "ROW_STATUS"])
+        if status == "MODIFICATA":
+            updated.at[idx, "DATA_VIEW"] = f"🔴 {base_data}"
+        else:
+            updated.at[idx, "DATA_VIEW"] = base_data
+    return updated
 
 
-def apply_step3_rules(tabella: pd.DataFrame, netto_ora: float, societa: str) -> tuple[pd.DataFrame, list[str]]:
+def apply_step3_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, origine_master: str) -> tuple[pd.DataFrame, list[str]]:
     df = tabella.copy()
     warnings = []
 
@@ -687,11 +670,22 @@ def apply_step3_rules(tabella: pd.DataFrame, netto_ora: float, societa: str) -> 
         df[col] = df[col].apply(safe_float)
 
     for idx in df.index:
-        for attivita, base_col in [
-            ("EDICOLA", "BASE_EDICOLA_ORE"),
-            ("MONDADORI", "BASE_MONDADORI_ORE"),
-            ("GIUNTI", "BASE_GIUNTI_ORE"),
-        ]:
+        if origine_master == ORIGINE_EDICOLA:
+            allowed = [("EDICOLA", "BASE_EDICOLA_ORE")]
+            blocked = [("MONDADORI", "BASE_MONDADORI_ORE"), ("GIUNTI", "BASE_GIUNTI_ORE")]
+        else:
+            allowed = [("MONDADORI", "BASE_MONDADORI_ORE"), ("GIUNTI", "BASE_GIUNTI_ORE")]
+            blocked = [("EDICOLA", "BASE_EDICOLA_ORE")]
+
+        for attivita, _ in blocked:
+            ore_col = f"{attivita}_ORE"
+            euro_col = f"{attivita}_€"
+            assenza_col = f"{attivita}_TIPO_ASSENZA"
+            df.at[idx, ore_col] = 0.0
+            df.at[idx, euro_col] = 0.0
+            df.at[idx, assenza_col] = ""
+
+        for attivita, base_col in allowed:
             ore_col = f"{attivita}_ORE"
             euro_col = f"{attivita}_€"
             assenza_col = f"{attivita}_TIPO_ASSENZA"
@@ -702,7 +696,7 @@ def apply_step3_rules(tabella: pd.DataFrame, netto_ora: float, societa: str) -> 
             if new_value > base_value:
                 df.at[idx, ore_col] = base_value
                 warnings.append(
-                    f"Giorno {int(df.at[idx, 'GIORNO_NUM'])}: sulle ore {attivita} non è consentito aumentare oltre il valore generato."
+                    f"Giorno {int(df.at[idx, 'GIORNO_NUM'])}: non è consentito aumentare le ore oltre il valore generato."
                 )
 
             if safe_float(df.at[idx, ore_col]) > 0 and normalize_text(df.at[idx, assenza_col]) != "":
@@ -715,29 +709,9 @@ def apply_step3_rules(tabella: pd.DataFrame, netto_ora: float, societa: str) -> 
                 societa,
             )
 
-        base_tot = round(
-            safe_float(df.at[idx, "BASE_EDICOLA_ORE"])
-            + safe_float(df.at[idx, "BASE_MONDADORI_ORE"])
-            + safe_float(df.at[idx, "BASE_GIUNTI_ORE"]),
-            2,
-        )
-        current_tot = round(
-            safe_float(df.at[idx, "EDICOLA_ORE"])
-            + safe_float(df.at[idx, "MONDADORI_ORE"])
-            + safe_float(df.at[idx, "GIUNTI_ORE"]),
-            2,
-        )
+        df.at[idx, "ROW_STATUS"] = get_row_status(df, idx)
 
-        has_assenza = (
-            normalize_text(df.at[idx, "EDICOLA_TIPO_ASSENZA"]) != ""
-            or normalize_text(df.at[idx, "MONDADORI_TIPO_ASSENZA"]) != ""
-            or normalize_text(df.at[idx, "GIUNTI_TIPO_ASSENZA"]) != ""
-        )
-
-        if has_assenza or current_tot < base_tot:
-            df.at[idx, "STATO_RIGA"] = "ASSENZA"
-        else:
-            df.at[idx, "STATO_RIGA"] = ""
+    df = update_data_view(df)
 
     if warnings:
         warnings = list(dict.fromkeys(warnings))
@@ -745,22 +719,47 @@ def apply_step3_rules(tabella: pd.DataFrame, netto_ora: float, societa: str) -> 
     return df, warnings
 
 
-def init_sheet_record(row: pd.Series, df_edicola: pd.DataFrame, df_libri: pd.DataFrame, anno: int, mese: int) -> dict:
-    sub_edicola = get_subset_by_key(df_edicola, row["COD_FISCALE"], row["SOCIETA"], row["PDV"])
-    sub_libri = get_subset_by_key(df_libri, row["COD_FISCALE"], row["SOCIETA"], row["PDV"])
+def calculate_sheet_stats(df: pd.DataFrame, origine_master: str) -> dict:
+    if origine_master == ORIGINE_EDICOLA:
+        current_hours = df["EDICOLA_ORE"].apply(safe_float)
+        base_hours = df["BASE_EDICOLA_ORE"].apply(safe_float)
+        euro_sum = df["EDICOLA_€"].apply(safe_float).sum()
+    else:
+        current_hours = df["MONDADORI_ORE"].apply(safe_float) + df["GIUNTI_ORE"].apply(safe_float)
+        base_hours = df["BASE_MONDADORI_ORE"].apply(safe_float) + df["BASE_GIUNTI_ORE"].apply(safe_float)
+        euro_sum = df["MONDADORI_€"].apply(safe_float).sum() + df["GIUNTI_€"].apply(safe_float).sum()
 
-    tabella = build_presence_dataframe(
-        sub_edicola=sub_edicola,
-        sub_libri=sub_libri,
+    giorni_lavorati = int((current_hours > 0).sum())
+    giorni_modificati = int((df["ROW_STATUS"].astype(str).str.strip() != "").sum())
+    tot_ore = round(current_hours.sum(), 2)
+    tot_ore_azzerate = round((base_hours - current_hours).sum(), 2)
+    tot_euro = round(euro_sum, 2)
+
+    return {
+        "GIORNI_LAVORATI": giorni_lavorati,
+        "GIORNI_MODIFICATI": giorni_modificati,
+        "TOT_ORE_LAVORATIVE_MESE": tot_ore,
+        "TOT_ORE_AZZERATE": tot_ore_azzerate,
+        "TOT_€_DA_SCALARE": 0.0,
+        "TOT_ATTIVITA_€": tot_euro,
+    }
+
+
+def init_sheet_record(row: pd.Series, anno: int, mese: int) -> dict:
+    tabella = build_presence_dataframe_from_selection(row, anno, mese)
+    tabella, _ = apply_step3_rules(
+        tabella=tabella,
         netto_ora=safe_float(row["NETTO_ORA"]),
-        societa=row["SOCIETA"],
-        anno=anno,
-        mese=mese,
+        societa=normalize_text(row["SOCIETA"]),
+        origine_master=normalize_upper(row["ORIGINE_MASTER"]),
     )
-    tabella, _ = apply_step3_rules(tabella, safe_float(row["NETTO_ORA"]), row["SOCIETA"])
-    stats = calculate_sheet_stats(tabella)
+    stats = calculate_sheet_stats(tabella, normalize_upper(row["ORIGINE_MASTER"]))
 
     record = {
+        "row_id": normalize_text(row["ROW_ID"]),
+        "origine_master": normalize_text(row["ORIGINE_MASTER"]),
+        "tipo_libri": normalize_text(row["TIPO_LIBRI"]),
+        "attivita_riga": normalize_text(row["ATTIVITA_RIGA"]),
         "societa": normalize_text(row["SOCIETA"]),
         "mese": mese,
         "anno": anno,
@@ -772,7 +771,7 @@ def init_sheet_record(row: pd.Series, df_edicola: pd.DataFrame, df_libri: pd.Dat
         "netto_mese": round(safe_float(row["NETTO_MESE"]), 2),
         "netto_ora": round(safe_float(row["NETTO_ORA"]), 2),
         "tipo_contratto": normalize_text(row["TIPO_CONTRATTO"]),
-        "scadenza_contratto": normalize_text(row["SCADENZA_CONTRATTO"]),
+        "scadenza_contratto": format_scadenza(row["SCADENZA_CONTRATTO"]),
         "giorni_lavorati": stats["GIORNI_LAVORATI"],
         "giorni_modificati": stats["GIORNI_MODIFICATI"],
         "tot_ore_lavorative_mese": stats["TOT_ORE_LAVORATIVE_MESE"],
@@ -788,7 +787,6 @@ def init_sheet_record(row: pd.Series, df_edicola: pd.DataFrame, df_libri: pd.Dat
         "rimborso_allegati": [],
         "note_generali": "",
         "tabella": tabella,
-        "originale_step3": deepcopy(tabella),
         "tot_attivita": stats["TOT_ATTIVITA_€"],
         "tot_netto_mese": 0.0,
     }
@@ -797,8 +795,13 @@ def init_sheet_record(row: pd.Series, df_edicola: pd.DataFrame, df_libri: pd.Dat
 
 
 def update_sheet_totals(record: dict):
-    record["tabella"], _ = apply_step3_rules(record["tabella"], record["netto_ora"], record["societa"])
-    stats = calculate_sheet_stats(record["tabella"])
+    record["tabella"], _ = apply_step3_rules(
+        tabella=record["tabella"],
+        netto_ora=record["netto_ora"],
+        societa=record["societa"],
+        origine_master=normalize_upper(record["origine_master"]),
+    )
+    stats = calculate_sheet_stats(record["tabella"], normalize_upper(record["origine_master"]))
     record["giorni_lavorati"] = stats["GIORNI_LAVORATI"]
     record["giorni_modificati"] = stats["GIORNI_MODIFICATI"]
     record["tot_ore_lavorative_mese"] = stats["TOT_ORE_LAVORATIVE_MESE"]
@@ -814,6 +817,42 @@ def update_sheet_totals(record: dict):
         + safe_float(record["rimborso"]),
         2,
     )
+
+
+def clear_entire_sheet(record: dict):
+    df = record["tabella"].copy()
+
+    df["EDICOLA_ORE"] = 0.0
+    df["EDICOLA_€"] = 0.0
+    df["EDICOLA_TIPO_ASSENZA"] = ""
+
+    df["MONDADORI_ORE"] = 0.0
+    df["MONDADORI_€"] = 0.0
+    df["MONDADORI_TIPO_ASSENZA"] = ""
+
+    df["GIUNTI_ORE"] = 0.0
+    df["GIUNTI_€"] = 0.0
+    df["GIUNTI_TIPO_ASSENZA"] = ""
+
+    df["ROW_STATUS"] = ""
+    df = update_data_view(df)
+    record["tabella"] = df
+
+    record["arretrati"] = 0.0
+    record["extra"] = 0.0
+    record["affiancamenti"] = 0.0
+    record["domeniche"] = 0.0
+    record["rimborso"] = 0.0
+    record["rimborso_allegati"] = []
+    record["note_generali"] = ""
+
+    record["tabella"], _ = apply_step3_rules(
+        tabella=record["tabella"],
+        netto_ora=record["netto_ora"],
+        societa=record["societa"],
+        origine_master=normalize_upper(record["origine_master"]),
+    )
+    update_sheet_totals(record)
 
 
 # =========================
@@ -950,6 +989,10 @@ def render_generation_page():
         num_rows="fixed",
         column_config={
             "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
+            "ROW_ID": None,
+            "MASTER_INDEX": None,
+            "ORIGINE_MASTER": st.column_config.TextColumn("Master origine", disabled=True),
+            "TIPO_LIBRI": st.column_config.TextColumn("Tipo libri", disabled=True),
             "NOME": st.column_config.TextColumn("Nome", disabled=True),
             "COD_FISCALE": st.column_config.TextColumn("CF", disabled=True),
             "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
@@ -960,8 +1003,7 @@ def render_generation_page():
             "NETTO_MESE": st.column_config.NumberColumn("Netto mese", format="%.2f €", disabled=True),
             "TIPO_CONTRATTO": st.column_config.TextColumn("Tipo contratto", disabled=True),
             "SCADENZA_CONTRATTO": st.column_config.TextColumn("Scadenza contratto", disabled=True),
-            "ATTIVITA_PRESENTI": st.column_config.TextColumn("Attività presenti", disabled=True),
-            "CHIAVE_BASE": None,
+            "ATTIVITA_RIGA": st.column_config.TextColumn("Attività", disabled=True),
         },
         key="editor_generation_table",
     )
@@ -975,15 +1017,14 @@ def render_generation_page():
             return
 
         for _, row in selected.iterrows():
-            key = format_sheet_key(row["COD_FISCALE"], row["SOCIETA"], row["PDV"], anno, mese)
+            key = format_sheet_key(normalize_text(row["ROW_ID"]), anno, mese)
             st.session_state["fogli_generati"][key] = init_sheet_record(
                 row=row,
-                df_edicola=st.session_state["df_edicola"],
-                df_libri=st.session_state["df_libri"],
                 anno=anno,
                 mese=mese,
             )
             st.session_state["foglio_attivo"] = key
+            st.session_state["sheet_warnings"][key] = []
 
         st.success("Fogli presenze generati correttamente.")
 
@@ -1011,6 +1052,7 @@ def render_sheet_page():
             f"{st.session_state['fogli_generati'][k]['nome']} | "
             f"{st.session_state['fogli_generati'][k]['societa']} | "
             f"{st.session_state['fogli_generati'][k]['pdv']} | "
+            f"{st.session_state['fogli_generati'][k]['attivita_riga']} | "
             f"{MESI[st.session_state['fogli_generati'][k]['mese']]} {st.session_state['fogli_generati'][k]['anno']}"
         ),
     )
@@ -1024,28 +1066,28 @@ def render_sheet_page():
     col_h1, col_h2, col_h3, col_h4 = st.columns(4)
     with col_h1:
         st.text_input("Società", value=record["societa"], disabled=True)
+        st.text_input("Attività", value=record["attivita_riga"], disabled=True)
         st.text_input("Nome", value=record["nome"], disabled=True)
-        st.text_input("CF", value=record["cf"], disabled=True)
     with col_h2:
+        st.text_input("CF", value=record["cf"], disabled=True)
         st.text_input("PDV", value=record["pdv"], disabled=True)
         st.text_input("Mese", value=f"{MESI[record['mese']]} {record['anno']}", disabled=True)
-        record["tipo_contratto"] = st.text_input("Tipo contratto", value=record["tipo_contratto"], disabled=locked)
     with col_h3:
+        record["tipo_contratto"] = st.text_input("Tipo contratto", value=record["tipo_contratto"], disabled=locked)
         record["scadenza_contratto"] = st.text_input("Scadenza contratto", value=record["scadenza_contratto"], disabled=locked)
         record["netto_mese"] = st.number_input("NETTO MESE", value=float(record["netto_mese"]), step=0.50, disabled=locked)
-        record["netto_ora"] = st.number_input("Netto orario", value=float(record["netto_ora"]), step=0.10, disabled=locked)
     with col_h4:
+        record["netto_ora"] = st.number_input("Netto orario", value=float(record["netto_ora"]), step=0.10, disabled=locked)
         st.number_input("Giorni lavorati", value=int(record["giorni_lavorati"]), disabled=True)
         st.number_input("Giorni modificati", value=int(record["giorni_modificati"]), disabled=True)
-        st.number_input("Tot ore lavorative mese", value=float(record["tot_ore_lavorative_mese"]), disabled=True)
 
     col_h5, col_h6, col_h7 = st.columns(3)
     with col_h5:
-        st.number_input("Tot ore azzerate", value=float(record["tot_ore_azzerate"]), disabled=True)
+        st.number_input("Tot ore lavorative mese", value=float(record["tot_ore_lavorative_mese"]), disabled=True)
     with col_h6:
-        st.number_input("Tot € da scalare", value=float(record["tot_euro_da_scalare"]), disabled=True)
+        st.number_input("Tot ore azzerate", value=float(record["tot_ore_azzerate"]), disabled=True)
     with col_h7:
-        st.write("")
+        st.number_input("Tot € da scalare", value=float(record["tot_euro_da_scalare"]), disabled=True)
 
     col_lock1, col_lock2 = st.columns(2)
     with col_lock1:
@@ -1061,110 +1103,205 @@ def render_sheet_page():
 
     locked = record["lucchetto_mese"] or record["lucchetto_foglio"]
 
+    if selected_key in st.session_state["sheet_warnings"] and st.session_state["sheet_warnings"][selected_key]:
+        for msg in st.session_state["sheet_warnings"][selected_key]:
+            render_warning_box(msg)
+
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
     st.markdown('<div class="table-title">Corpo foglio presenze</div>', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="activity-note">
-            Nel corpo foglio sono consentiti solo: invariato, riduzione ore, azzeramento ore.
-            Aumento ore non consentito nello STEP 3.
-            <div class="activity-legend">
-                <span class="activity-pill pill-edicola">EDICOLA</span>
-                <span class="activity-pill pill-mondadori">MONDADORI</span>
-                <span class="activity-pill pill-giunti">GIUNTI</span>
+
+    if normalize_upper(record["origine_master"]) == ORIGINE_EDICOLA:
+        st.markdown(
+            """
+            <div class="activity-note">
+                Foglio presenza generato da riga Master Edicola.
+                <div class="activity-legend">
+                    <span class="activity-pill pill-edicola">EDICOLA</span>
+                </div>
             </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
 
-    visible_cols = [
-        "GIORNO_NUM",
-        "DATA",
-        "GIORNO_SETTIMANA",
-        "EDICOLA_ORE",
-        "EDICOLA_€",
-        "EDICOLA_TIPO_ASSENZA",
-        "SEP_1",
-        "MONDADORI_ORE",
-        "MONDADORI_€",
-        "MONDADORI_TIPO_ASSENZA",
-        "SEP_2",
-        "GIUNTI_ORE",
-        "GIUNTI_€",
-        "GIUNTI_TIPO_ASSENZA",
-        "FESTIVO",
-    ]
+        visible_cols = [
+            "GIORNO_NUM",
+            "DATA_VIEW",
+            "GIORNO_SETTIMANA",
+            "EDICOLA_ORE",
+            "EDICOLA_€",
+            "EDICOLA_TIPO_ASSENZA",
+            "FESTIVO",
+        ]
 
-    display_df = record["tabella"][COLONNE_TABELLA].copy().reset_index(drop=True)
-    display_df.insert(6, "SEP_1", "│")
-    display_df.insert(10, "SEP_2", "│")
+        display_df = record["tabella"][COLONNE_TABELLA_TECNICHE].copy().reset_index(drop=True)
 
-    editor_key = f"editor_tabella_{selected_key}"
-    edited = st.data_editor(
-        display_df[visible_cols],
-        hide_index=True,
-        use_container_width=True,
-        num_rows="fixed",
-        disabled=locked,
-        column_config={
-            "GIORNO_NUM": st.column_config.NumberColumn("Giorno", disabled=True),
-            "DATA": st.column_config.TextColumn("Data", disabled=True),
-            "GIORNO_SETTIMANA": st.column_config.TextColumn("Giorno settimana", disabled=True),
-            "EDICOLA_ORE": st.column_config.NumberColumn("Edicola Ore", min_value=0.0, step=0.5, format="%.2f"),
-            "EDICOLA_€": st.column_config.NumberColumn("Edicola €", format="%.2f €", disabled=True),
-            "EDICOLA_TIPO_ASSENZA": st.column_config.SelectboxColumn("Edicola Tipo assenza", options=TIPI_ASSENZA),
-            "SEP_1": st.column_config.TextColumn("│", disabled=True),
-            "MONDADORI_ORE": st.column_config.NumberColumn("Mondadori Ore", min_value=0.0, step=0.5, format="%.2f"),
-            "MONDADORI_€": st.column_config.NumberColumn("Mondadori €", format="%.2f €", disabled=True),
-            "MONDADORI_TIPO_ASSENZA": st.column_config.SelectboxColumn("Mondadori Tipo assenza", options=TIPI_ASSENZA),
-            "SEP_2": st.column_config.TextColumn("│", disabled=True),
-            "GIUNTI_ORE": st.column_config.NumberColumn("Giunti Ore", min_value=0.0, step=0.5, format="%.2f"),
-            "GIUNTI_€": st.column_config.NumberColumn("Giunti €", format="%.2f €", disabled=True),
-            "GIUNTI_TIPO_ASSENZA": st.column_config.SelectboxColumn("Giunti Tipo assenza", options=TIPI_ASSENZA),
-            "FESTIVO": st.column_config.CheckboxColumn("Festivo"),
-        },
-        key=editor_key,
-    )
+        edited = st.data_editor(
+            display_df[visible_cols],
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            disabled=locked,
+            column_config={
+                "GIORNO_NUM": st.column_config.NumberColumn("Giorno", disabled=True),
+                "DATA_VIEW": st.column_config.TextColumn("Data", disabled=True),
+                "GIORNO_SETTIMANA": st.column_config.TextColumn("Giorno settimana", disabled=True),
+                "EDICOLA_ORE": st.column_config.NumberColumn("Edicola Ore", min_value=0.0, step=0.5, format="%.2f"),
+                "EDICOLA_€": st.column_config.NumberColumn("Edicola €", format="%.2f €", disabled=True),
+                "EDICOLA_TIPO_ASSENZA": st.column_config.SelectboxColumn("Edicola Tipo assenza", options=TIPI_ASSENZA),
+                "FESTIVO": st.column_config.CheckboxColumn("Festivo"),
+            },
+            key=f"editor_tabella_{selected_key}",
+        )
 
-    warning_map = st.session_state["sheet_warnings"]
-    if selected_key in warning_map and warning_map[selected_key]:
-        for msg in warning_map[selected_key]:
-            st.warning(msg)
+        if not locked:
+            hidden_cols = record["tabella"][
+                ["DATA", "ROW_STATUS"] + COLONNE_BASE_ALL + ["MONDADORI_ORE", "MONDADORI_€", "MONDADORI_TIPO_ASSENZA", "GIUNTI_ORE", "GIUNTI_€", "GIUNTI_TIPO_ASSENZA"]
+            ].copy().reset_index(drop=True)
 
-    if not locked:
-        edited_clean = edited.drop(columns=["SEP_1", "SEP_2"]).reset_index(drop=True)
-        hidden_cols = record["tabella"][COLONNE_BASE_ORE + ["STATO_RIGA"]].copy().reset_index(drop=True)
-        merged = pd.concat([edited_clean, hidden_cols], axis=1)
-        merged, warnings = apply_step3_rules(merged, record["netto_ora"], record["societa"])
+            edited_clean = edited.copy().reset_index(drop=True)
+            merged = pd.concat([edited_clean, hidden_cols], axis=1)
 
-        current_visible = record["tabella"][COLONNE_TABELLA].reset_index(drop=True)
-        new_visible = merged[COLONNE_TABELLA].reset_index(drop=True)
+            merged = merged[
+                [
+                    "GIORNO_NUM",
+                    "DATA",
+                    "GIORNO_SETTIMANA",
+                    "DATA_VIEW",
+                    "EDICOLA_ORE",
+                    "EDICOLA_€",
+                    "EDICOLA_TIPO_ASSENZA",
+                    "MONDADORI_ORE",
+                    "MONDADORI_€",
+                    "MONDADORI_TIPO_ASSENZA",
+                    "GIUNTI_ORE",
+                    "GIUNTI_€",
+                    "GIUNTI_TIPO_ASSENZA",
+                    "FESTIVO",
+                    "ROW_STATUS",
+                    "BASE_EDICOLA_ORE",
+                    "BASE_MONDADORI_ORE",
+                    "BASE_GIUNTI_ORE",
+                ]
+            ]
 
-        if not new_visible.equals(current_visible):
+            merged, warnings = apply_step3_rules(
+                tabella=merged,
+                netto_ora=record["netto_ora"],
+                societa=record["societa"],
+                origine_master=normalize_upper(record["origine_master"]),
+            )
+
+            old_visible = record["tabella"][visible_cols].copy().reset_index(drop=True)
+            new_visible = merged[visible_cols].copy().reset_index(drop=True)
+
             record["tabella"] = merged
             st.session_state["sheet_warnings"][selected_key] = warnings
             update_sheet_totals(record)
-            st.rerun()
-        else:
-            record["tabella"] = merged
-            st.session_state["sheet_warnings"][selected_key] = warnings
-            update_sheet_totals(record)
+
+            if not new_visible.equals(old_visible):
+                st.rerun()
+
     else:
-        update_sheet_totals(record)
+        st.markdown(
+            """
+            <div class="activity-note">
+                Foglio presenza generato da riga Master Libri.
+                <div class="activity-legend">
+                    <span class="activity-pill pill-mondadori">MONDADORI</span>
+                    <span class="activity-pill pill-giunti">GIUNTI</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    if st.button("Azzera foglio corrente", disabled=locked, use_container_width=True):
-        record["tabella"] = deepcopy(record["originale_step3"])
-        record["arretrati"] = 0.0
-        record["extra"] = 0.0
-        record["affiancamenti"] = 0.0
-        record["domeniche"] = 0.0
-        record["rimborso"] = 0.0
-        record["rimborso_allegati"] = []
-        record["note_generali"] = ""
-        st.session_state["sheet_warnings"][selected_key] = []
-        update_sheet_totals(record)
-        st.rerun()
+        visible_cols = [
+            "GIORNO_NUM",
+            "DATA_VIEW",
+            "GIORNO_SETTIMANA",
+            "MONDADORI_ORE",
+            "MONDADORI_€",
+            "MONDADORI_TIPO_ASSENZA",
+            "SEP_1",
+            "GIUNTI_ORE",
+            "GIUNTI_€",
+            "GIUNTI_TIPO_ASSENZA",
+            "FESTIVO",
+        ]
+
+        display_df = record["tabella"][COLONNE_TABELLA_TECNICHE].copy().reset_index(drop=True)
+        display_df.insert(6, "SEP_1", "│")
+
+        edited = st.data_editor(
+            display_df[visible_cols],
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            disabled=locked,
+            column_config={
+                "GIORNO_NUM": st.column_config.NumberColumn("Giorno", disabled=True),
+                "DATA_VIEW": st.column_config.TextColumn("Data", disabled=True),
+                "GIORNO_SETTIMANA": st.column_config.TextColumn("Giorno settimana", disabled=True),
+                "MONDADORI_ORE": st.column_config.NumberColumn("Mondadori Ore", min_value=0.0, step=0.5, format="%.2f"),
+                "MONDADORI_€": st.column_config.NumberColumn("Mondadori €", format="%.2f €", disabled=True),
+                "MONDADORI_TIPO_ASSENZA": st.column_config.SelectboxColumn("Mondadori Tipo assenza", options=TIPI_ASSENZA),
+                "SEP_1": st.column_config.TextColumn("│", disabled=True),
+                "GIUNTI_ORE": st.column_config.NumberColumn("Giunti Ore", min_value=0.0, step=0.5, format="%.2f"),
+                "GIUNTI_€": st.column_config.NumberColumn("Giunti €", format="%.2f €", disabled=True),
+                "GIUNTI_TIPO_ASSENZA": st.column_config.SelectboxColumn("Giunti Tipo assenza", options=TIPI_ASSENZA),
+                "FESTIVO": st.column_config.CheckboxColumn("Festivo"),
+            },
+            key=f"editor_tabella_{selected_key}",
+        )
+
+        if not locked:
+            edited_clean = edited.drop(columns=["SEP_1"]).copy().reset_index(drop=True)
+            hidden_cols = record["tabella"][
+                ["DATA", "ROW_STATUS"] + COLONNE_BASE_ALL + ["EDICOLA_ORE", "EDICOLA_€", "EDICOLA_TIPO_ASSENZA"]
+            ].copy().reset_index(drop=True)
+
+            merged = pd.concat([edited_clean, hidden_cols], axis=1)
+            merged = merged[
+                [
+                    "GIORNO_NUM",
+                    "DATA",
+                    "GIORNO_SETTIMANA",
+                    "DATA_VIEW",
+                    "EDICOLA_ORE",
+                    "EDICOLA_€",
+                    "EDICOLA_TIPO_ASSENZA",
+                    "MONDADORI_ORE",
+                    "MONDADORI_€",
+                    "MONDADORI_TIPO_ASSENZA",
+                    "GIUNTI_ORE",
+                    "GIUNTI_€",
+                    "GIUNTI_TIPO_ASSENZA",
+                    "FESTIVO",
+                    "ROW_STATUS",
+                    "BASE_EDICOLA_ORE",
+                    "BASE_MONDADORI_ORE",
+                    "BASE_GIUNTI_ORE",
+                ]
+            ]
+
+            merged, warnings = apply_step3_rules(
+                tabella=merged,
+                netto_ora=record["netto_ora"],
+                societa=record["societa"],
+                origine_master=normalize_upper(record["origine_master"]),
+            )
+
+            old_visible = display_df[visible_cols].copy().reset_index(drop=True)
+            new_display = merged.copy().reset_index(drop=True)
+            new_display.insert(6, "SEP_1", "│")
+            new_visible = new_display[visible_cols].copy().reset_index(drop=True)
+
+            record["tabella"] = merged
+            st.session_state["sheet_warnings"][selected_key] = warnings
+            update_sheet_totals(record)
+
+            if not new_visible.equals(old_visible):
+                st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1224,22 +1361,14 @@ def render_sheet_page():
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
-    st.markdown('<div class="table-title">Evidenziazione righe</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="small-legend">Anteprima variazioni rilevate dal sistema. Questa tabella verrà eliminata nell’ultima riscrittura.</div>',
-        unsafe_allow_html=True,
-    )
-
-    preview_df = record["tabella"][[
-        "GIORNO_NUM", "DATA", "GIORNO_SETTIMANA",
-        "EDICOLA_ORE", "EDICOLA_TIPO_ASSENZA",
-        "MONDADORI_ORE", "MONDADORI_TIPO_ASSENZA",
-        "GIUNTI_ORE", "GIUNTI_TIPO_ASSENZA",
-        "FESTIVO", "STATO_RIGA"
-    ]].copy()
-    st.dataframe(style_presence_preview(preview_df), use_container_width=True, hide_index=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    col_reset1, col_reset2 = st.columns([1, 1])
+    with col_reset1:
+        if st.button("Azzera foglio presenza", disabled=locked, use_container_width=True):
+            clear_entire_sheet(record)
+            st.session_state["sheet_warnings"][selected_key] = []
+            st.rerun()
+    with col_reset2:
+        st.write("")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
