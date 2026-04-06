@@ -574,7 +574,13 @@ def build_generation_table(df_edicola: pd.DataFrame, df_libri: pd.DataFrame) -> 
 # COSTRUZIONE FOGLIO
 # =========================
 
-def build_presence_dataframe_from_selection(row: pd.Series, anno: int, mese: int) -> pd.DataFrame:
+def build_presence_dataframe_from_selection(
+    row: pd.Series,
+    df_edicola: pd.DataFrame,
+    df_libri: pd.DataFrame,
+    anno: int,
+    mese: int,
+) -> pd.DataFrame:
     giorni_mese = calendar.monthrange(anno, mese)[1]
     righe = []
 
@@ -582,15 +588,21 @@ def build_presence_dataframe_from_selection(row: pd.Series, anno: int, mese: int
     tipo_libri = normalize_upper(row.get("TIPO_LIBRI", ""))
     societa = normalize_text(row["SOCIETA"])
     netto_ora = safe_float(row["NETTO_ORA"])
+    master_index = int(row["MASTER_INDEX"])
+
+    if origine == ORIGINE_EDICOLA:
+        source_row = df_edicola.iloc[master_index]
+    else:
+        source_row = df_libri.iloc[master_index]
 
     def get_master_hours_for_day(giorno_label: str) -> tuple[float, float, float]:
         if origine == ORIGINE_EDICOLA:
-            return safe_float(row[giorno_label]), 0.0, 0.0
+            return safe_float(source_row[giorno_label]), 0.0, 0.0
         if origine == ORIGINE_LIBRI:
             if tipo_libri == "MONDADORI":
-                return 0.0, safe_float(row[giorno_label]), 0.0
+                return 0.0, safe_float(source_row[giorno_label]), 0.0
             if tipo_libri == "GIUNTI":
-                return 0.0, 0.0, safe_float(row[giorno_label])
+                return 0.0, 0.0, safe_float(source_row[giorno_label])
             return 0.0, 0.0, 0.0
         return 0.0, 0.0, 0.0
 
@@ -745,8 +757,20 @@ def calculate_sheet_stats(df: pd.DataFrame, origine_master: str) -> dict:
     }
 
 
-def init_sheet_record(row: pd.Series, anno: int, mese: int) -> dict:
-    tabella = build_presence_dataframe_from_selection(row, anno, mese)
+def init_sheet_record(
+    row: pd.Series,
+    df_edicola: pd.DataFrame,
+    df_libri: pd.DataFrame,
+    anno: int,
+    mese: int,
+) -> dict:
+    tabella = build_presence_dataframe_from_selection(
+        row=row,
+        df_edicola=df_edicola,
+        df_libri=df_libri,
+        anno=anno,
+        mese=mese,
+    )
     tabella, _ = apply_step3_rules(
         tabella=tabella,
         netto_ora=safe_float(row["NETTO_ORA"]),
@@ -1020,6 +1044,8 @@ def render_generation_page():
             key = format_sheet_key(normalize_text(row["ROW_ID"]), anno, mese)
             st.session_state["fogli_generati"][key] = init_sheet_record(
                 row=row,
+                df_edicola=st.session_state["df_edicola"],
+                df_libri=st.session_state["df_libri"],
                 anno=anno,
                 mese=mese,
             )
