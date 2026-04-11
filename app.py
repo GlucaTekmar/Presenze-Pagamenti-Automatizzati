@@ -1399,6 +1399,1397 @@ def render_sheet_page():
     st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================
+# STEP 4 - NUOVO FOGLIO PRESENZA / SOSTITUZIONE
+# DA INCOLLARE SUBITO PRIMA DEL BLOCCO APP
+# =========================
+
+STEP4_MODO_TITOLARE = "SOSTITUZIONE CON TITOLARE"
+STEP4_MODO_SPOT = "SOSTITUZIONE CON SOSTITUTO SPOT"
+STEP4_MODO_VUOTO = "FOGLIO PRESENZA VUOTO"
+
+
+def ensure_session_state():
+    defaults = {
+        "df_edicola": pd.DataFrame(),
+        "df_libri": pd.DataFrame(),
+        "df_spot": pd.DataFrame(),
+        "generation_table": pd.DataFrame(),
+        "fogli_generati": {},
+        "foglio_attivo": None,
+        "master_loaded": False,
+        "sheet_warnings": {},
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+def step4_build_empty_presence_dataframe(attivita: str, anno: int, mese: int) -> pd.DataFrame:
+    giorni_mese = calendar.monthrange(anno, mese)[1]
+    righe = []
+
+    for giorno_num in range(1, giorni_mese + 1):
+        current_date = date(anno, mese, giorno_num)
+        festivo_default = current_date.weekday() == 6
+
+        righe.append(
+            {
+                "GIORNO_NUM": giorno_num,
+                "DATA": current_date.strftime("%d/%m/%Y"),
+                "GIORNO_SETTIMANA": get_day_label(current_date),
+                "DATA_VIEW": current_date.strftime("%d/%m/%Y"),
+                "EDICOLA_ORE": 0.0,
+                "EDICOLA_€": 0.0,
+                "EDICOLA_TIPO_ASSENZA": "",
+                "MONDADORI_ORE": 0.0,
+                "MONDADORI_€": 0.0,
+                "MONDADORI_TIPO_ASSENZA": "",
+                "GIUNTI_ORE": 0.0,
+                "GIUNTI_€": 0.0,
+                "GIUNTI_TIPO_ASSENZA": "",
+                "FESTIVO": festivo_default,
+                "ROW_STATUS": "",
+                "BASE_EDICOLA_ORE": 0.0,
+                "BASE_MONDADORI_ORE": 0.0,
+                "BASE_GIUNTI_ORE": 0.0,
+                "STEP4_ALLOW_MANUAL": True,
+            }
+        )
+
+    df = pd.DataFrame(righe)
+    if normalize_upper(attivita) == ORIGINE_EDICOLA:
+        df["MONDADORI_ORE"] = 0.0
+        df["MONDADORI_€"] = 0.0
+        df["MONDADORI_TIPO_ASSENZA"] = ""
+        df["GIUNTI_ORE"] = 0.0
+        df["GIUNTI_€"] = 0.0
+        df["GIUNTI_TIPO_ASSENZA"] = ""
+    else:
+        df["EDICOLA_ORE"] = 0.0
+        df["EDICOLA_€"] = 0.0
+        df["EDICOLA_TIPO_ASSENZA"] = ""
+
+    return df
+
+
+def step4_get_societa_options() -> list[str]:
+    societa = set()
+
+    if not st.session_state["df_edicola"].empty:
+        societa.update(st.session_state["df_edicola"]["AGENZIA"].dropna().astype(str).str.strip().tolist())
+
+    if not st.session_state["df_libri"].empty:
+        societa.update(st.session_state["df_libri"]["AGENZIA"].dropna().astype(str).str.strip().tolist())
+
+    return sorted([x for x in societa if normalize_text(x) != ""])
+
+
+def step4_extract_main_candidates(societa: str, attivita: str) -> list[dict]:
+    candidati = []
+
+    if normalize_upper(attivita) == ORIGINE_EDICOLA:
+        df = st.session_state["df_edicola"].copy()
+        if not df.empty:
+            df = df[df["AGENZIA"].astype(str).str.strip().str.upper() == normalize_upper(societa)].copy()
+
+            for idx, row in df.reset_index(drop=True).iterrows():
+                candidati.append(
+                    {
+                        "CANDIDATE_ID": f"MAIN_EDICOLA_{idx}",
+                        "MASTER_INDEX": idx,
+                        "ORIGINE_MASTER": ORIGINE_EDICOLA,
+                        "ATTIVITA": "EDICOLA",
+                        "TIPO_LIBRI": "",
+                        "NOME": normalize_text(row["MHS_TITOLARE"]),
+                        "COD_FISCALE": normalize_text(row["COD_FISCALE"]),
+                        "SOCIETA": normalize_text(row["AGENZIA"]),
+                        "PDV": normalize_text(row["PDV"]),
+                        "TELEFONO": normalize_text(row["TEL_MHS"]),
+                        "EMAIL": normalize_text(row["MAIL_MHS"]),
+                        "NETTO_ORA": safe_float(row["NETTO_ORA"]),
+                        "NETTO_MESE": safe_float(row["COMPENSO_MENSILE"]),
+                        "TIPO_CONTRATTO": normalize_text(row["TIPO_CONTRATTO"]),
+                        "SCADENZA_CONTRATTO": format_scadenza(row["SCADENZA_CONTRATTO"]),
+                        "ORE_LUN": safe_float(row["LUN"]),
+                        "ORE_MAR": safe_float(row["MAR"]),
+                        "ORE_MER": safe_float(row["MER"]),
+                        "ORE_GIO": safe_float(row["GIO"]),
+                        "ORE_VEN": safe_float(row["VEN"]),
+                        "ORE_SAB": safe_float(row["SAB"]),
+                        "ORE_DOM": safe_float(row["DOM"]),
+                    }
+                )
+    else:
+        df = st.session_state["df_libri"].copy()
+        if not df.empty:
+            df = df[df["AGENZIA"].astype(str).str.strip().str.upper() == normalize_upper(societa)].copy()
+
+            for idx, row in df.reset_index(drop=True).iterrows():
+                tipo_libri = normalize_upper(row["TIPO_LIBRI"])
+                candidati.append(
+                    {
+                        "CANDIDATE_ID": f"MAIN_LIBRI_{idx}",
+                        "MASTER_INDEX": idx,
+                        "ORIGINE_MASTER": ORIGINE_LIBRI,
+                        "ATTIVITA": "LIBRI",
+                        "TIPO_LIBRI": tipo_libri,
+                        "NOME": normalize_text(row["MHS_TITOLARE"]),
+                        "COD_FISCALE": normalize_text(row["COD_FISCALE"]),
+                        "SOCIETA": normalize_text(row["AGENZIA"]),
+                        "PDV": normalize_text(row["PDV"]),
+                        "TELEFONO": normalize_text(row["TEL_MHS"]),
+                        "EMAIL": normalize_text(row["MAIL_MHS"]),
+                        "NETTO_ORA": safe_float(row["NETTO_ORA"]),
+                        "NETTO_MESE": 0.0,
+                        "TIPO_CONTRATTO": normalize_text(row["TIPO_CONTRATTO"]),
+                        "SCADENZA_CONTRATTO": format_scadenza(row["SCADENZA_CONTRATTO"]),
+                        "ORE_LUN": safe_float(row["LUN"]),
+                        "ORE_MAR": safe_float(row["MAR"]),
+                        "ORE_MER": safe_float(row["MER"]),
+                        "ORE_GIO": safe_float(row["GIO"]),
+                        "ORE_VEN": safe_float(row["VEN"]),
+                        "ORE_SAB": safe_float(row["SAB"]),
+                        "ORE_DOM": safe_float(row["DOM"]),
+                    }
+                )
+
+    return candidati
+
+
+def step4_extract_spot_candidates() -> list[dict]:
+    candidati = []
+    df = st.session_state["df_spot"].copy()
+
+    if df.empty:
+        return candidati
+
+    for idx, row in df.reset_index(drop=True).iterrows():
+        candidati.append(
+            {
+                "CANDIDATE_ID": f"SPOT_{idx}",
+                "NOME": normalize_text(row["MHS_SOSTITUTO_SPOT"]),
+                "COD_FISCALE": normalize_text(row["COD_FISCALE"]),
+                "TELEFONO": normalize_text(row["TEL"]),
+                "EMAIL": normalize_text(row["MAIL"]),
+                "NETTO_ORA": safe_float(row["NETTO_ORA"]),
+                "TIPO_CONTRATTO": normalize_text(row["TIPO_CONTRATTO"]),
+                "SCADENZA_CONTRATTO": format_scadenza(row["SCADENZA_CONTRATTO"]),
+            }
+        )
+
+    return candidati
+
+
+def step4_get_candidate_label(candidato: dict) -> str:
+    tipo_libri = normalize_text(candidato.get("TIPO_LIBRI", ""))
+    suffix = f" | {tipo_libri}" if tipo_libri else ""
+    return (
+        f"{normalize_text(candidato.get('NOME', ''))}"
+        f" | {normalize_text(candidato.get('PDV', ''))}"
+        f" | {normalize_text(candidato.get('COD_FISCALE', ''))}"
+        f"{suffix}"
+    )
+
+
+def step4_get_spot_label(candidato: dict) -> str:
+    return (
+        f"{normalize_text(candidato.get('NOME', ''))}"
+        f" | {normalize_text(candidato.get('COD_FISCALE', ''))}"
+        f" | Netto/ora {safe_float(candidato.get('NETTO_ORA', 0.0)):.2f}"
+    )
+
+
+def step4_find_candidate_by_id(candidati: list[dict], candidate_id: str) -> dict | None:
+    for candidato in candidati:
+        if normalize_text(candidato.get("CANDIDATE_ID", "")) == normalize_text(candidate_id):
+            return candidato
+    return None
+
+
+def step4_get_selected_days_list(tipo_periodo: str, anno: int, mese: int, giorno_singolo: int | None, periodo_range) -> list[int]:
+    if tipo_periodo == "Giorno singolo":
+        if giorno_singolo is None:
+            return []
+        return [int(giorno_singolo)]
+
+    if not periodo_range or len(periodo_range) != 2:
+        return []
+
+    data_inizio, data_fine = periodo_range
+    if not data_inizio or not data_fine:
+        return []
+
+    if data_inizio > data_fine:
+        return []
+
+    primo_giorno_mese = date(anno, mese, 1)
+    ultimo_giorno_mese = date(anno, mese, calendar.monthrange(anno, mese)[1])
+
+    if data_inizio < primo_giorno_mese or data_fine > ultimo_giorno_mese:
+        return []
+
+    giorni = []
+    current = data_inizio
+    while current <= data_fine:
+        giorni.append(current.day)
+        current = current.fromordinal(current.toordinal() + 1)
+
+    return giorni
+
+
+def step4_days_to_text(giorni: list[int]) -> str:
+    if not giorni:
+        return ""
+    if len(giorni) == 1:
+        return f"Giorno {giorni[0]}"
+    return f"Giorni da {min(giorni)} a {max(giorni)}"
+
+
+def step4_init_sheet_record(
+    modo_creazione: str,
+    societa: str,
+    attivita: str,
+    anno: int,
+    mese: int,
+    selected_days: list[int],
+    main_candidates: list[dict],
+    spot_candidates: list[dict],
+) -> dict:
+    row_id = f"STEP4_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+    origine_master = ORIGINE_EDICOLA if normalize_upper(attivita) == ORIGINE_EDICOLA else ORIGINE_LIBRI
+    tabella = step4_build_empty_presence_dataframe(attivita=attivita, anno=anno, mese=mese)
+
+    record = {
+        "row_id": row_id,
+        "origine_master": origine_master,
+        "tipo_libri": "",
+        "attivita_riga": normalize_upper(attivita),
+        "societa": normalize_text(societa),
+        "mese": mese,
+        "anno": anno,
+        "nome": "",
+        "cf": "",
+        "pdv": "",
+        "telefono": "",
+        "email": "",
+        "netto_mese": 0.0,
+        "netto_ora": 0.0,
+        "tipo_contratto": "",
+        "scadenza_contratto": "",
+        "giorni_lavorati": 0,
+        "giorni_modificati": 0,
+        "tot_ore_lavorative_mese": 0.0,
+        "tot_ore_azzerate": 0.0,
+        "tot_euro_da_scalare": 0.0,
+        "lucchetto_foglio": False,
+        "lucchetto_mese": False,
+        "arretrati": 0.0,
+        "extra": 0.0,
+        "affiancamenti": 0.0,
+        "domeniche": 0.0,
+        "rimborso": 0.0,
+        "rimborso_allegati": [],
+        "note_generali": "",
+        "tabella": tabella,
+        "tot_attivita": 0.0,
+        "tot_netto_mese": 0.0,
+        "is_step4": True,
+        "step4_mode": normalize_text(modo_creazione),
+        "step4_selected_days": list(selected_days),
+        "step4_main_candidates": deepcopy(main_candidates),
+        "step4_spot_candidates": deepcopy(spot_candidates),
+        "step4_main_candidate_id": "",
+        "step4_spot_candidate_id": "",
+    }
+
+    update_sheet_totals(record)
+    return record
+
+
+def step4_apply_main_candidate_to_record(record: dict, candidato: dict):
+    if not candidato:
+        return
+
+    selected_days = record.get("step4_selected_days", [])
+    attivita = normalize_upper(record["attivita_riga"])
+    modo = normalize_upper(record.get("step4_mode", ""))
+
+    record["step4_main_candidate_id"] = normalize_text(candidato["CANDIDATE_ID"])
+    record["societa"] = normalize_text(candidato["SOCIETA"])
+    record["pdv"] = normalize_text(candidato["PDV"])
+
+    if modo != STEP4_MODO_SPOT:
+        record["nome"] = normalize_text(candidato["NOME"])
+        record["cf"] = normalize_text(candidato["COD_FISCALE"])
+        record["telefono"] = normalize_text(candidato["TELEFONO"])
+        record["email"] = normalize_text(candidato["EMAIL"])
+        record["netto_ora"] = round(safe_float(candidato["NETTO_ORA"]), 2)
+        record["netto_mese"] = round(safe_float(candidato["NETTO_MESE"]), 2)
+        record["tipo_contratto"] = normalize_text(candidato["TIPO_CONTRATTO"])
+        record["scadenza_contratto"] = normalize_text(candidato["SCADENZA_CONTRATTO"])
+
+    record["tipo_libri"] = normalize_text(candidato.get("TIPO_LIBRI", ""))
+
+    df = record["tabella"].copy()
+
+    for idx in df.index:
+        giorno_num = int(df.at[idx, "GIORNO_NUM"])
+        if giorno_num not in selected_days:
+            continue
+
+        giorno_settimana = normalize_upper(df.at[idx, "GIORNO_SETTIMANA"])
+        ore_master = safe_float(candidato.get(f"ORE_{giorno_settimana}", 0.0))
+
+        if attivita == ORIGINE_EDICOLA:
+            df.at[idx, "BASE_EDICOLA_ORE"] = ore_master
+            df.at[idx, "EDICOLA_ORE"] = ore_master
+            df.at[idx, "EDICOLA_TIPO_ASSENZA"] = ""
+        else:
+            tipo_libri = normalize_upper(candidato.get("TIPO_LIBRI", ""))
+            if tipo_libri == "MONDADORI":
+                df.at[idx, "BASE_MONDADORI_ORE"] = ore_master
+                df.at[idx, "MONDADORI_ORE"] = ore_master
+                df.at[idx, "MONDADORI_TIPO_ASSENZA"] = ""
+            elif tipo_libri == "GIUNTI":
+                df.at[idx, "BASE_GIUNTI_ORE"] = ore_master
+                df.at[idx, "GIUNTI_ORE"] = ore_master
+                df.at[idx, "GIUNTI_TIPO_ASSENZA"] = ""
+
+    record["tabella"] = df
+    update_sheet_totals(record)
+
+
+def step4_apply_spot_candidate_to_record(record: dict, candidato: dict):
+    if not candidato:
+        return
+
+    record["step4_spot_candidate_id"] = normalize_text(candidato["CANDIDATE_ID"])
+    record["nome"] = normalize_text(candidato["NOME"])
+    record["cf"] = normalize_text(candidato["COD_FISCALE"])
+    record["telefono"] = normalize_text(candidato["TELEFONO"])
+    record["email"] = normalize_text(candidato["EMAIL"])
+    record["netto_ora"] = round(safe_float(candidato["NETTO_ORA"]), 2)
+    record["tipo_contratto"] = normalize_text(candidato["TIPO_CONTRATTO"])
+    record["scadenza_contratto"] = normalize_text(candidato["SCADENZA_CONTRATTO"])
+
+    update_sheet_totals(record)
+
+
+def get_row_status(df: pd.DataFrame, idx: int) -> str:
+    base_tot = round(
+        safe_float(df.at[idx, "BASE_EDICOLA_ORE"])
+        + safe_float(df.at[idx, "BASE_MONDADORI_ORE"])
+        + safe_float(df.at[idx, "BASE_GIUNTI_ORE"]),
+        2,
+    )
+    current_tot = round(
+        safe_float(df.at[idx, "EDICOLA_ORE"])
+        + safe_float(df.at[idx, "MONDADORI_ORE"])
+        + safe_float(df.at[idx, "GIUNTI_ORE"]),
+        2,
+    )
+
+    has_assenza = (
+        normalize_text(df.at[idx, "EDICOLA_TIPO_ASSENZA"]) != ""
+        or normalize_text(df.at[idx, "MONDADORI_TIPO_ASSENZA"]) != ""
+        or normalize_text(df.at[idx, "GIUNTI_TIPO_ASSENZA"]) != ""
+    )
+
+    manual_mode = False
+    if "STEP4_ALLOW_MANUAL" in df.columns:
+        manual_mode = bool(df.at[idx, "STEP4_ALLOW_MANUAL"])
+
+    if manual_mode:
+        if has_assenza or round(current_tot, 2) != round(base_tot, 2):
+            return "MODIFICATA"
+        return ""
+
+    if has_assenza or current_tot < base_tot:
+        return "MODIFICATA"
+    return ""
+
+
+def apply_step3_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, origine_master: str) -> tuple[pd.DataFrame, list[str]]:
+    df = tabella.copy()
+    warnings = []
+
+    for col in ["EDICOLA_ORE", "MONDADORI_ORE", "GIUNTI_ORE"]:
+        df[col] = df[col].apply(safe_float)
+
+    for idx in df.index:
+        manual_mode = False
+        if "STEP4_ALLOW_MANUAL" in df.columns:
+            manual_mode = bool(df.at[idx, "STEP4_ALLOW_MANUAL"])
+
+        if origine_master == ORIGINE_EDICOLA:
+            allowed = [("EDICOLA", "BASE_EDICOLA_ORE")]
+            blocked = [("MONDADORI", "BASE_MONDADORI_ORE"), ("GIUNTI", "BASE_GIUNTI_ORE")]
+        else:
+            allowed = [("MONDADORI", "BASE_MONDADORI_ORE"), ("GIUNTI", "BASE_GIUNTI_ORE")]
+            blocked = [("EDICOLA", "BASE_EDICOLA_ORE")]
+
+        for attivita, _ in blocked:
+            ore_col = f"{attivita}_ORE"
+            euro_col = f"{attivita}_€"
+            assenza_col = f"{attivita}_TIPO_ASSENZA"
+            df.at[idx, ore_col] = 0.0
+            df.at[idx, euro_col] = 0.0
+            df.at[idx, assenza_col] = ""
+
+        for attivita, base_col in allowed:
+            ore_col = f"{attivita}_ORE"
+            euro_col = f"{attivita}_€"
+            assenza_col = f"{attivita}_TIPO_ASSENZA"
+
+            base_value = safe_float(df.at[idx, base_col])
+            new_value = max(0.0, safe_float(df.at[idx, ore_col]))
+
+            if (not manual_mode) and new_value > base_value:
+                df.at[idx, ore_col] = base_value
+                warnings.append(
+                    f"Giorno {int(df.at[idx, 'GIORNO_NUM'])}: non è consentito aumentare le ore oltre il valore generato."
+                )
+            else:
+                df.at[idx, ore_col] = new_value
+
+            if safe_float(df.at[idx, ore_col]) > 0 and normalize_text(df.at[idx, assenza_col]) != "":
+                df.at[idx, assenza_col] = ""
+
+            df.at[idx, euro_col] = calculate_row_amount(
+                df.at[idx, ore_col],
+                netto_ora,
+                bool(df.at[idx, "FESTIVO"]),
+                societa,
+            )
+
+        df.at[idx, "ROW_STATUS"] = get_row_status(df, idx)
+
+    df = update_data_view(df)
+
+    if warnings:
+        warnings = list(dict.fromkeys(warnings))
+
+    return df, warnings
+
+
+def render_generation_page():
+    render_page_title("2. Generazione fogli presenze")
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
+
+    if not st.session_state["master_loaded"]:
+        st.warning("Prima carica e verifica i master nella sezione 'Caricamento master'.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        anno = st.selectbox("Anno", [2025, 2026, 2027], index=1, key="anno_step3")
+    with col2:
+        mese = st.selectbox("Mese", list(MESI.keys()), format_func=lambda x: MESI[x], index=0, key="mese_step3")
+
+    filtro_nome = st.text_input("Filtro semplice nome/cognome", placeholder="Scrivi nome o cognome")
+
+    generation_table = st.session_state["generation_table"].copy()
+    if generation_table.empty:
+        st.warning("Nessuna riga disponibile per la generazione dei fogli.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    if filtro_nome.strip():
+        mask = generation_table["NOME"].str.upper().str.contains(filtro_nome.strip().upper(), na=False)
+        generation_table = generation_table[mask].copy()
+
+    if generation_table.empty:
+        st.info("Nessun risultato trovato con il filtro inserito.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+    edited = st.data_editor(
+        generation_table,
+        hide_index=True,
+        use_container_width=True,
+        num_rows="fixed",
+        column_config={
+            "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
+            "ROW_ID": None,
+            "MASTER_INDEX": None,
+            "ORIGINE_MASTER": st.column_config.TextColumn("Master origine", disabled=True),
+            "TIPO_LIBRI": st.column_config.TextColumn("Tipo libri", disabled=True),
+            "NOME": st.column_config.TextColumn("Nome", disabled=True),
+            "COD_FISCALE": st.column_config.TextColumn("CF", disabled=True),
+            "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
+            "PDV": st.column_config.TextColumn("PDV", disabled=True),
+            "TELEFONO": st.column_config.TextColumn("Telefono", disabled=True),
+            "EMAIL": st.column_config.TextColumn("Email", disabled=True),
+            "NETTO_ORA": st.column_config.NumberColumn("Netto orario", format="%.2f €", disabled=True),
+            "NETTO_MESE": st.column_config.NumberColumn("Netto mese", format="%.2f €", disabled=True),
+            "TIPO_CONTRATTO": st.column_config.TextColumn("Tipo contratto", disabled=True),
+            "SCADENZA_CONTRATTO": st.column_config.TextColumn("Scadenza contratto", disabled=True),
+            "ATTIVITA_RIGA": st.column_config.TextColumn("Attività", disabled=True),
+        },
+        key="editor_generation_table",
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if st.button("Genera fogli presenze selezionati", type="primary", use_container_width=True):
+        selected = edited[edited["SELEZIONA"] == True].copy()
+        if selected.empty:
+            st.warning("Seleziona almeno una riga.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
+
+        for _, row in selected.iterrows():
+            key = format_sheet_key(normalize_text(row["ROW_ID"]), anno, mese)
+            st.session_state["fogli_generati"][key] = init_sheet_record(
+                row=row,
+                df_edicola=st.session_state["df_edicola"],
+                df_libri=st.session_state["df_libri"],
+                anno=anno,
+                mese=mese,
+            )
+            st.session_state["foglio_attivo"] = key
+            st.session_state["sheet_warnings"][key] = []
+
+        st.success("Fogli presenze generati correttamente.")
+
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+    st.markdown('<div class="table-title">STEP 4 - Nuovo foglio presenza / sostituzione</div>', unsafe_allow_html=True)
+
+    societa_options = step4_get_societa_options()
+    giorni_mese = calendar.monthrange(anno, mese)[1]
+    primo_giorno_mese = date(anno, mese, 1)
+    ultimo_giorno_mese = date(anno, mese, giorni_mese)
+
+    col_s41, col_s42 = st.columns(2)
+    with col_s41:
+        modo_creazione = st.selectbox(
+            "Cosa vuoi fare",
+            [STEP4_MODO_TITOLARE, STEP4_MODO_SPOT, STEP4_MODO_VUOTO],
+            key="step4_modo_creazione",
+        )
+    with col_s42:
+        societa_step4 = st.selectbox(
+            "Società",
+            societa_options,
+            index=0 if societa_options else None,
+            key="step4_societa",
+        ) if societa_options else st.selectbox("Società", [""], key="step4_societa_fallback")
+
+    col_s43, col_s44 = st.columns(2)
+    with col_s43:
+        attivita_step4 = st.selectbox("Attività", [ORIGINE_EDICOLA, ORIGINE_LIBRI], key="step4_attivita")
+    with col_s44:
+        tipo_periodo = st.selectbox("Giorno singolo oppure periodo", ["Giorno singolo", "Periodo"], key="step4_tipo_periodo")
+
+    giorno_singolo = None
+    periodo_range = None
+
+    if tipo_periodo == "Giorno singolo":
+        giorno_singolo = st.selectbox("Giorno", list(range(1, giorni_mese + 1)), key="step4_giorno_singolo")
+    else:
+        periodo_range = st.date_input(
+            "Periodo",
+            value=(primo_giorno_mese, primo_giorno_mese),
+            min_value=primo_giorno_mese,
+            max_value=ultimo_giorno_mese,
+            key="step4_periodo_range",
+        )
+
+    if st.button("NUOVO FOGLIO PRESENZA / SOSTITUZIONE", type="primary", use_container_width=True):
+        if not normalize_text(societa_step4):
+            st.warning("Seleziona la società.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
+
+        selected_days = step4_get_selected_days_list(
+            tipo_periodo=tipo_periodo,
+            anno=anno,
+            mese=mese,
+            giorno_singolo=giorno_singolo,
+            periodo_range=periodo_range,
+        )
+
+        if not selected_days:
+            st.warning("Giorno o periodo non valido per il mese selezionato.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
+
+        main_candidates = step4_extract_main_candidates(societa=societa_step4, attivita=attivita_step4)
+        spot_candidates = step4_extract_spot_candidates()
+
+        record = step4_init_sheet_record(
+            modo_creazione=modo_creazione,
+            societa=societa_step4,
+            attivita=attivita_step4,
+            anno=anno,
+            mese=mese,
+            selected_days=selected_days,
+            main_candidates=main_candidates,
+            spot_candidates=spot_candidates,
+        )
+
+        key = format_sheet_key(record["row_id"], anno, mese)
+        st.session_state["fogli_generati"][key] = record
+        st.session_state["foglio_attivo"] = key
+        st.session_state["sheet_warnings"][key] = []
+
+        st.success("Foglio STEP 4 creato correttamente.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_sheet_page():
+    render_page_title("3. Gestione foglio presenze")
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
+
+    if not st.session_state["fogli_generati"]:
+        st.warning("Prima genera almeno un foglio nella sezione 'Generazione fogli'.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    keys = list(st.session_state["fogli_generati"].keys())
+    if st.session_state["foglio_attivo"] not in keys:
+        st.session_state["foglio_attivo"] = keys[0]
+
+    selected_key = st.selectbox(
+        "Seleziona foglio attivo",
+        options=keys,
+        index=keys.index(st.session_state["foglio_attivo"]),
+        format_func=lambda k: (
+            f"{st.session_state['fogli_generati'][k]['nome'] or 'SENZA NOME'} | "
+            f"{st.session_state['fogli_generati'][k]['societa']} | "
+            f"{st.session_state['fogli_generati'][k]['pdv'] or 'SENZA PDV'} | "
+            f"{st.session_state['fogli_generati'][k]['attivita_riga']} | "
+            f"{MESI[st.session_state['fogli_generati'][k]['mese']]} {st.session_state['fogli_generati'][k]['anno']}"
+        ),
+    )
+    st.session_state["foglio_attivo"] = selected_key
+    record = st.session_state["fogli_generati"][selected_key]
+    locked = record["lucchetto_mese"] or record["lucchetto_foglio"]
+
+    if record.get("is_step4", False):
+        st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+        st.markdown('<div class="table-title">Compilazione guidata STEP 4</div>', unsafe_allow_html=True)
+
+        st.markdown(
+            f"""
+            <div class="soft-note">
+                <b>Modalità:</b> {record.get('step4_mode', '')}<br>
+                <b>Periodo selezionato:</b> {step4_days_to_text(record.get('step4_selected_days', []))}<br>
+                <b>Regola:</b> dove possibile compilazione guidata; resta comunque possibile la compilazione manuale.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        main_candidates = record.get("step4_main_candidates", [])
+        main_map = {"": "Seleziona riga da master principale"}
+        for candidato in main_candidates:
+            main_map[candidato["CANDIDATE_ID"]] = step4_get_candidate_label(candidato)
+
+        selected_main_candidate_id = st.selectbox(
+            "Master principale",
+            options=list(main_map.keys()),
+            index=(list(main_map.keys()).index(record.get("step4_main_candidate_id", "")) if record.get("step4_main_candidate_id", "") in main_map else 0),
+            format_func=lambda x: main_map[x],
+            key=f"step4_main_candidate_{selected_key}",
+            disabled=locked,
+        )
+
+        if st.button("Applica dati da master principale", key=f"btn_apply_main_{selected_key}", disabled=locked, use_container_width=True):
+            candidato = step4_find_candidate_by_id(main_candidates, selected_main_candidate_id)
+            if candidato is None:
+                st.warning("Seleziona una riga valida del master principale.")
+            else:
+                step4_apply_main_candidate_to_record(record, candidato)
+                st.session_state["sheet_warnings"][selected_key] = []
+                st.rerun()
+
+        if normalize_upper(record.get("step4_mode", "")) == STEP4_MODO_SPOT:
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            spot_candidates = record.get("step4_spot_candidates", [])
+            spot_map = {"": "Seleziona sostituto spot"}
+            for candidato in spot_candidates:
+                spot_map[candidato["CANDIDATE_ID"]] = step4_get_spot_label(candidato)
+
+            selected_spot_candidate_id = st.selectbox(
+                "Master Sostituti Spot",
+                options=list(spot_map.keys()),
+                index=(list(spot_map.keys()).index(record.get("step4_spot_candidate_id", "")) if record.get("step4_spot_candidate_id", "") in spot_map else 0),
+                format_func=lambda x: spot_map[x],
+                key=f"step4_spot_candidate_{selected_key}",
+                disabled=locked,
+            )
+
+            if st.button("Applica dati da Master Sostituti Spot", key=f"btn_apply_spot_{selected_key}", disabled=locked, use_container_width=True):
+                candidato = step4_find_candidate_by_id(spot_candidates, selected_spot_candidate_id)
+                if candidato is None:
+                    st.warning("Seleziona un sostituto spot valido.")
+                else:
+                    step4_apply_spot_candidate_to_record(record, candidato)
+                    st.session_state["sheet_warnings"][selected_key] = []
+                    st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+
+        col_h1, col_h2, col_h3, col_h4 = st.columns(4)
+        with col_h1:
+            record["societa"] = st.text_input("Società", value=record["societa"], disabled=locked, key=f"societa_{selected_key}")
+            st.text_input("Attività", value=record["attivita_riga"], disabled=True, key=f"attivita_{selected_key}")
+            record["nome"] = st.text_input("Nome", value=record["nome"], disabled=locked, key=f"nome_{selected_key}")
+        with col_h2:
+            record["cf"] = st.text_input("CF", value=record["cf"], disabled=locked, key=f"cf_{selected_key}")
+            record["pdv"] = st.text_input("PDV", value=record["pdv"], disabled=locked, key=f"pdv_{selected_key}")
+            st.text_input("Mese", value=f"{MESI[record['mese']]} {record['anno']}", disabled=True, key=f"mese_{selected_key}")
+        with col_h3:
+            record["tipo_contratto"] = st.text_input("Tipo contratto", value=record["tipo_contratto"], disabled=locked, key=f"tipocontratto_{selected_key}")
+            record["scadenza_contratto"] = st.text_input("Scadenza contratto", value=record["scadenza_contratto"], disabled=locked, key=f"scadenzacontratto_{selected_key}")
+            record["netto_mese"] = st.number_input("NETTO MESE", value=float(record["netto_mese"]), step=0.50, disabled=locked, key=f"nettomese_{selected_key}")
+        with col_h4:
+            record["netto_ora"] = st.number_input("Netto orario", value=float(record["netto_ora"]), step=0.10, disabled=locked, key=f"nettoora_{selected_key}")
+            st.number_input("Giorni lavorati", value=int(record["giorni_lavorati"]), disabled=True, key=f"giornilavorati_{selected_key}")
+            st.number_input("Giorni modificati", value=int(record["giorni_modificati"]), disabled=True, key=f"giornimodificati_{selected_key}")
+
+        col_h5, col_h6, col_h7 = st.columns(3)
+        with col_h5:
+            st.number_input("Tot ore lavorative mese", value=float(record["tot_ore_lavorative_mese"]), disabled=True, key=f"totore_{selected_key}")
+        with col_h6:
+            st.number_input("Tot ore azzerate", value=float(record["tot_ore_azzerate"]), disabled=True, key=f"totoreazz_{selected_key}")
+        with col_h7:
+            st.number_input("Tot € da scalare", value=float(record["tot_euro_da_scalare"]), disabled=True, key=f"toteuroscalare_{selected_key}")
+
+        col_lock1, col_lock2 = st.columns(2)
+        with col_lock1:
+            record["lucchetto_foglio"] = st.checkbox(
+                "Lucchetto foglio",
+                value=record["lucchetto_foglio"],
+                disabled=record["lucchetto_mese"],
+                key=f"lockfoglio_{selected_key}",
+            )
+        with col_lock2:
+            record["lucchetto_mese"] = st.checkbox("Lucchetto mese", value=record["lucchetto_mese"], key=f"lockmese_{selected_key}")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        locked = record["lucchetto_mese"] or record["lucchetto_foglio"]
+
+        if selected_key in st.session_state["sheet_warnings"] and st.session_state["sheet_warnings"][selected_key]:
+            for msg in st.session_state["sheet_warnings"][selected_key]:
+                render_warning_box(msg)
+
+        st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+        st.markdown('<div class="table-title">Corpo foglio presenze</div>', unsafe_allow_html=True)
+
+        if normalize_upper(record["origine_master"]) == ORIGINE_EDICOLA:
+            st.markdown(
+                """
+                <div class="activity-note">
+                    Foglio presenza STEP 4 struttura Edicola.
+                    <div class="activity-legend">
+                        <span class="activity-pill pill-edicola">EDICOLA</span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            visible_cols = [
+                "GIORNO_NUM",
+                "DATA_VIEW",
+                "GIORNO_SETTIMANA",
+                "EDICOLA_ORE",
+                "EDICOLA_€",
+                "EDICOLA_TIPO_ASSENZA",
+                "FESTIVO",
+            ]
+
+            display_df = record["tabella"].copy().reset_index(drop=True)
+
+            edited = st.data_editor(
+                display_df[visible_cols],
+                hide_index=True,
+                use_container_width=True,
+                num_rows="fixed",
+                disabled=locked,
+                column_config={
+                    "GIORNO_NUM": st.column_config.NumberColumn("Giorno", disabled=True),
+                    "DATA_VIEW": st.column_config.TextColumn("Data", disabled=True),
+                    "GIORNO_SETTIMANA": st.column_config.TextColumn("Giorno settimana", disabled=True),
+                    "EDICOLA_ORE": st.column_config.NumberColumn("Edicola Ore", min_value=0.0, step=0.5, format="%.2f"),
+                    "EDICOLA_€": st.column_config.NumberColumn("Edicola €", format="%.2f €", disabled=True),
+                    "EDICOLA_TIPO_ASSENZA": st.column_config.SelectboxColumn("Edicola Tipo assenza", options=TIPI_ASSENZA),
+                    "FESTIVO": st.column_config.CheckboxColumn("Festivo"),
+                },
+                key=f"editor_tabella_{selected_key}",
+            )
+
+            if not locked:
+                hidden_cols = record["tabella"][
+                    [
+                        "DATA",
+                        "ROW_STATUS",
+                        "BASE_EDICOLA_ORE",
+                        "BASE_MONDADORI_ORE",
+                        "BASE_GIUNTI_ORE",
+                        "MONDADORI_ORE",
+                        "MONDADORI_€",
+                        "MONDADORI_TIPO_ASSENZA",
+                        "GIUNTI_ORE",
+                        "GIUNTI_€",
+                        "GIUNTI_TIPO_ASSENZA",
+                        "STEP4_ALLOW_MANUAL",
+                    ]
+                ].copy().reset_index(drop=True)
+
+                edited_clean = edited.copy().reset_index(drop=True)
+                merged = pd.concat([edited_clean, hidden_cols], axis=1)
+
+                merged = merged[
+                    [
+                        "GIORNO_NUM",
+                        "DATA",
+                        "GIORNO_SETTIMANA",
+                        "DATA_VIEW",
+                        "EDICOLA_ORE",
+                        "EDICOLA_€",
+                        "EDICOLA_TIPO_ASSENZA",
+                        "MONDADORI_ORE",
+                        "MONDADORI_€",
+                        "MONDADORI_TIPO_ASSENZA",
+                        "GIUNTI_ORE",
+                        "GIUNTI_€",
+                        "GIUNTI_TIPO_ASSENZA",
+                        "FESTIVO",
+                        "ROW_STATUS",
+                        "BASE_EDICOLA_ORE",
+                        "BASE_MONDADORI_ORE",
+                        "BASE_GIUNTI_ORE",
+                        "STEP4_ALLOW_MANUAL",
+                    ]
+                ]
+
+                merged, warnings = apply_step3_rules(
+                    tabella=merged,
+                    netto_ora=record["netto_ora"],
+                    societa=record["societa"],
+                    origine_master=normalize_upper(record["origine_master"]),
+                )
+
+                old_visible = record["tabella"][visible_cols].copy().reset_index(drop=True)
+                new_visible = merged[visible_cols].copy().reset_index(drop=True)
+
+                record["tabella"] = merged
+                st.session_state["sheet_warnings"][selected_key] = warnings
+                update_sheet_totals(record)
+
+                if not new_visible.equals(old_visible):
+                    st.rerun()
+
+        else:
+            st.markdown(
+                """
+                <div class="activity-note">
+                    Foglio presenza STEP 4 struttura Libri.
+                    <div class="activity-legend">
+                        <span class="activity-pill pill-mondadori">MONDADORI</span>
+                        <span class="activity-pill pill-giunti">GIUNTI</span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            visible_cols = [
+                "GIORNO_NUM",
+                "DATA_VIEW",
+                "GIORNO_SETTIMANA",
+                "MONDADORI_ORE",
+                "MONDADORI_€",
+                "MONDADORI_TIPO_ASSENZA",
+                "SEP_1",
+                "GIUNTI_ORE",
+                "GIUNTI_€",
+                "GIUNTI_TIPO_ASSENZA",
+                "FESTIVO",
+            ]
+
+            display_df = record["tabella"].copy().reset_index(drop=True)
+            display_df.insert(6, "SEP_1", "│")
+
+            edited = st.data_editor(
+                display_df[visible_cols],
+                hide_index=True,
+                use_container_width=True,
+                num_rows="fixed",
+                disabled=locked,
+                column_config={
+                    "GIORNO_NUM": st.column_config.NumberColumn("Giorno", disabled=True),
+                    "DATA_VIEW": st.column_config.TextColumn("Data", disabled=True),
+                    "GIORNO_SETTIMANA": st.column_config.TextColumn("Giorno settimana", disabled=True),
+                    "MONDADORI_ORE": st.column_config.NumberColumn("Mondadori Ore", min_value=0.0, step=0.5, format="%.2f"),
+                    "MONDADORI_€": st.column_config.NumberColumn("Mondadori €", format="%.2f €", disabled=True),
+                    "MONDADORI_TIPO_ASSENZA": st.column_config.SelectboxColumn("Mondadori Tipo assenza", options=TIPI_ASSENZA),
+                    "SEP_1": st.column_config.TextColumn("│", disabled=True),
+                    "GIUNTI_ORE": st.column_config.NumberColumn("Giunti Ore", min_value=0.0, step=0.5, format="%.2f"),
+                    "GIUNTI_€": st.column_config.NumberColumn("Giunti €", format="%.2f €", disabled=True),
+                    "GIUNTI_TIPO_ASSENZA": st.column_config.SelectboxColumn("Giunti Tipo assenza", options=TIPI_ASSENZA),
+                    "FESTIVO": st.column_config.CheckboxColumn("Festivo"),
+                },
+                key=f"editor_tabella_{selected_key}",
+            )
+
+            if not locked:
+                edited_clean = edited.drop(columns=["SEP_1"]).copy().reset_index(drop=True)
+                hidden_cols = record["tabella"][
+                    [
+                        "DATA",
+                        "ROW_STATUS",
+                        "BASE_EDICOLA_ORE",
+                        "BASE_MONDADORI_ORE",
+                        "BASE_GIUNTI_ORE",
+                        "EDICOLA_ORE",
+                        "EDICOLA_€",
+                        "EDICOLA_TIPO_ASSENZA",
+                        "STEP4_ALLOW_MANUAL",
+                    ]
+                ].copy().reset_index(drop=True)
+
+                merged = pd.concat([edited_clean, hidden_cols], axis=1)
+                merged = merged[
+                    [
+                        "GIORNO_NUM",
+                        "DATA",
+                        "GIORNO_SETTIMANA",
+                        "DATA_VIEW",
+                        "EDICOLA_ORE",
+                        "EDICOLA_€",
+                        "EDICOLA_TIPO_ASSENZA",
+                        "MONDADORI_ORE",
+                        "MONDADORI_€",
+                        "MONDADORI_TIPO_ASSENZA",
+                        "GIUNTI_ORE",
+                        "GIUNTI_€",
+                        "GIUNTI_TIPO_ASSENZA",
+                        "FESTIVO",
+                        "ROW_STATUS",
+                        "BASE_EDICOLA_ORE",
+                        "BASE_MONDADORI_ORE",
+                        "BASE_GIUNTI_ORE",
+                        "STEP4_ALLOW_MANUAL",
+                    ]
+                ]
+
+                merged, warnings = apply_step3_rules(
+                    tabella=merged,
+                    netto_ora=record["netto_ora"],
+                    societa=record["societa"],
+                    origine_master=normalize_upper(record["origine_master"]),
+                )
+
+                old_visible = display_df[visible_cols].copy().reset_index(drop=True)
+                new_display = merged.copy().reset_index(drop=True)
+                new_display.insert(6, "SEP_1", "│")
+                new_visible = new_display[visible_cols].copy().reset_index(drop=True)
+
+                record["tabella"] = merged
+                st.session_state["sheet_warnings"][selected_key] = warnings
+                update_sheet_totals(record)
+
+                if not new_visible.equals(old_visible):
+                    st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+        st.markdown('<div class="table-title">Fondo foglio</div>', unsafe_allow_html=True)
+
+        col_b1, col_b2, col_b3, col_b4, col_b5 = st.columns(5)
+        with col_b1:
+            record["arretrati"] = st.number_input("€ arretrato", value=float(record["arretrati"]), step=0.50, disabled=locked, key=f"arretrati_{selected_key}")
+        with col_b2:
+            record["extra"] = st.number_input("€ extra", value=float(record["extra"]), step=0.50, disabled=locked, key=f"extra_{selected_key}")
+        with col_b3:
+            record["affiancamenti"] = st.number_input("€ affiancamento", value=float(record["affiancamenti"]), step=0.50, disabled=locked, key=f"affiancamenti_{selected_key}")
+        with col_b4:
+            record["domeniche"] = st.number_input("€ domeniche", value=float(record["domeniche"]), step=0.50, disabled=locked, key=f"domeniche_{selected_key}")
+        with col_b5:
+            record["rimborso"] = st.number_input("€ rimborso", value=float(record["rimborso"]), step=0.50, disabled=locked, key=f"rimborso_{selected_key}")
+
+        uploaded_docs = st.file_uploader(
+            "Allegati rimborso",
+            accept_multiple_files=True,
+            disabled=locked,
+            key=f"rimborso_upload_{selected_key}",
+        )
+        if uploaded_docs is not None:
+            record["rimborso_allegati"] = [file.name for file in uploaded_docs]
+
+        if record["rimborso_allegati"]:
+            st.caption("Allegati caricati: " + ", ".join(record["rimborso_allegati"]))
+
+        record["note_generali"] = st.text_area(
+            "NOTE GENERALI DEL MESE",
+            value=record["note_generali"],
+            height=130,
+            disabled=locked,
+            key=f"note_{selected_key}",
+        )
+
+        update_sheet_totals(record)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+        st.markdown('<div class="table-title">Totale finale</div>', unsafe_allow_html=True)
+
+        col_t1, col_t2 = st.columns([2, 1])
+        with col_t1:
+            st.markdown(
+                """
+                <div class="soft-note">
+                    <b>Formula STEP 4</b><br>
+                    TOT NETTO MESE = Tot attività + Arretrati + Extra + Affiancamenti + Domeniche + Rimborsi
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col_t2:
+            st.metric("TOT NETTO MESE", f"€ {record['tot_netto_mese']:.2f}")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        col_reset1, col_reset2 = st.columns([1, 1])
+        with col_reset1:
+            if st.button("Azzera foglio presenza", disabled=locked, use_container_width=True, key=f"azzera_{selected_key}"):
+                clear_entire_sheet(record)
+                st.session_state["sheet_warnings"][selected_key] = []
+                st.rerun()
+        with col_reset2:
+            st.write("")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    # ---- flusso standard STEP 3 invariato ----
+
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+
+    col_h1, col_h2, col_h3, col_h4 = st.columns(4)
+    with col_h1:
+        st.text_input("Società", value=record["societa"], disabled=True)
+        st.text_input("Attività", value=record["attivita_riga"], disabled=True)
+        st.text_input("Nome", value=record["nome"], disabled=True)
+    with col_h2:
+        st.text_input("CF", value=record["cf"], disabled=True)
+        st.text_input("PDV", value=record["pdv"], disabled=True)
+        st.text_input("Mese", value=f"{MESI[record['mese']]} {record['anno']}", disabled=True)
+    with col_h3:
+        record["tipo_contratto"] = st.text_input("Tipo contratto", value=record["tipo_contratto"], disabled=locked)
+        record["scadenza_contratto"] = st.text_input("Scadenza contratto", value=record["scadenza_contratto"], disabled=locked)
+        record["netto_mese"] = st.number_input("NETTO MESE", value=float(record["netto_mese"]), step=0.50, disabled=locked)
+    with col_h4:
+        record["netto_ora"] = st.number_input("Netto orario", value=float(record["netto_ora"]), step=0.10, disabled=locked)
+        st.number_input("Giorni lavorati", value=int(record["giorni_lavorati"]), disabled=True)
+        st.number_input("Giorni modificati", value=int(record["giorni_modificati"]), disabled=True)
+
+    col_h5, col_h6, col_h7 = st.columns(3)
+    with col_h5:
+        st.number_input("Tot ore lavorative mese", value=float(record["tot_ore_lavorative_mese"]), disabled=True)
+    with col_h6:
+        st.number_input("Tot ore azzerate", value=float(record["tot_ore_azzerate"]), disabled=True)
+    with col_h7:
+        st.number_input("Tot € da scalare", value=float(record["tot_euro_da_scalare"]), disabled=True)
+
+    col_lock1, col_lock2 = st.columns(2)
+    with col_lock1:
+        record["lucchetto_foglio"] = st.checkbox(
+            "Lucchetto foglio",
+            value=record["lucchetto_foglio"],
+            disabled=record["lucchetto_mese"],
+        )
+    with col_lock2:
+        record["lucchetto_mese"] = st.checkbox("Lucchetto mese", value=record["lucchetto_mese"])
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    locked = record["lucchetto_mese"] or record["lucchetto_foglio"]
+
+    if selected_key in st.session_state["sheet_warnings"] and st.session_state["sheet_warnings"][selected_key]:
+        for msg in st.session_state["sheet_warnings"][selected_key]:
+            render_warning_box(msg)
+
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+    st.markdown('<div class="table-title">Corpo foglio presenze</div>', unsafe_allow_html=True)
+
+    if normalize_upper(record["origine_master"]) == ORIGINE_EDICOLA:
+        st.markdown(
+            """
+            <div class="activity-note">
+                Foglio presenza generato da riga Master Edicola.
+                <div class="activity-legend">
+                    <span class="activity-pill pill-edicola">EDICOLA</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        visible_cols = [
+            "GIORNO_NUM",
+            "DATA_VIEW",
+            "GIORNO_SETTIMANA",
+            "EDICOLA_ORE",
+            "EDICOLA_€",
+            "EDICOLA_TIPO_ASSENZA",
+            "FESTIVO",
+        ]
+
+        display_df = record["tabella"][COLONNE_TABELLA_TECNICHE].copy().reset_index(drop=True)
+
+        edited = st.data_editor(
+            display_df[visible_cols],
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            disabled=locked,
+            column_config={
+                "GIORNO_NUM": st.column_config.NumberColumn("Giorno", disabled=True),
+                "DATA_VIEW": st.column_config.TextColumn("Data", disabled=True),
+                "GIORNO_SETTIMANA": st.column_config.TextColumn("Giorno settimana", disabled=True),
+                "EDICOLA_ORE": st.column_config.NumberColumn("Edicola Ore", min_value=0.0, step=0.5, format="%.2f"),
+                "EDICOLA_€": st.column_config.NumberColumn("Edicola €", format="%.2f €", disabled=True),
+                "EDICOLA_TIPO_ASSENZA": st.column_config.SelectboxColumn("Edicola Tipo assenza", options=TIPI_ASSENZA),
+                "FESTIVO": st.column_config.CheckboxColumn("Festivo"),
+            },
+            key=f"editor_tabella_{selected_key}",
+        )
+
+        if not locked:
+            hidden_cols = record["tabella"][
+                ["DATA", "ROW_STATUS"] + COLONNE_BASE_ALL + ["MONDADORI_ORE", "MONDADORI_€", "MONDADORI_TIPO_ASSENZA", "GIUNTI_ORE", "GIUNTI_€", "GIUNTI_TIPO_ASSENZA"]
+            ].copy().reset_index(drop=True)
+
+            edited_clean = edited.copy().reset_index(drop=True)
+            merged = pd.concat([edited_clean, hidden_cols], axis=1)
+
+            merged = merged[
+                [
+                    "GIORNO_NUM",
+                    "DATA",
+                    "GIORNO_SETTIMANA",
+                    "DATA_VIEW",
+                    "EDICOLA_ORE",
+                    "EDICOLA_€",
+                    "EDICOLA_TIPO_ASSENZA",
+                    "MONDADORI_ORE",
+                    "MONDADORI_€",
+                    "MONDADORI_TIPO_ASSENZA",
+                    "GIUNTI_ORE",
+                    "GIUNTI_€",
+                    "GIUNTI_TIPO_ASSENZA",
+                    "FESTIVO",
+                    "ROW_STATUS",
+                    "BASE_EDICOLA_ORE",
+                    "BASE_MONDADORI_ORE",
+                    "BASE_GIUNTI_ORE",
+                ]
+            ]
+
+            merged, warnings = apply_step3_rules(
+                tabella=merged,
+                netto_ora=record["netto_ora"],
+                societa=record["societa"],
+                origine_master=normalize_upper(record["origine_master"]),
+            )
+
+            old_visible = record["tabella"][visible_cols].copy().reset_index(drop=True)
+            new_visible = merged[visible_cols].copy().reset_index(drop=True)
+
+            record["tabella"] = merged
+            st.session_state["sheet_warnings"][selected_key] = warnings
+            update_sheet_totals(record)
+
+            if not new_visible.equals(old_visible):
+                st.rerun()
+
+    else:
+        st.markdown(
+            """
+            <div class="activity-note">
+                Foglio presenza generato da riga Master Libri.
+                <div class="activity-legend">
+                    <span class="activity-pill pill-mondadori">MONDADORI</span>
+                    <span class="activity-pill pill-giunti">GIUNTI</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        visible_cols = [
+            "GIORNO_NUM",
+            "DATA_VIEW",
+            "GIORNO_SETTIMANA",
+            "MONDADORI_ORE",
+            "MONDADORI_€",
+            "MONDADORI_TIPO_ASSENZA",
+            "SEP_1",
+            "GIUNTI_ORE",
+            "GIUNTI_€",
+            "GIUNTI_TIPO_ASSENZA",
+            "FESTIVO",
+        ]
+
+        display_df = record["tabella"][COLONNE_TABELLA_TECNICHE].copy().reset_index(drop=True)
+        display_df.insert(6, "SEP_1", "│")
+
+        edited = st.data_editor(
+            display_df[visible_cols],
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            disabled=locked,
+            column_config={
+                "GIORNO_NUM": st.column_config.NumberColumn("Giorno", disabled=True),
+                "DATA_VIEW": st.column_config.TextColumn("Data", disabled=True),
+                "GIORNO_SETTIMANA": st.column_config.TextColumn("Giorno settimana", disabled=True),
+                "MONDADORI_ORE": st.column_config.NumberColumn("Mondadori Ore", min_value=0.0, step=0.5, format="%.2f"),
+                "MONDADORI_€": st.column_config.NumberColumn("Mondadori €", format="%.2f €", disabled=True),
+                "MONDADORI_TIPO_ASSENZA": st.column_config.SelectboxColumn("Mondadori Tipo assenza", options=TIPI_ASSENZA),
+                "SEP_1": st.column_config.TextColumn("│", disabled=True),
+                "GIUNTI_ORE": st.column_config.NumberColumn("Giunti Ore", min_value=0.0, step=0.5, format="%.2f"),
+                "GIUNTI_€": st.column_config.NumberColumn("Giunti €", format="%.2f €", disabled=True),
+                "GIUNTI_TIPO_ASSENZA": st.column_config.SelectboxColumn("Giunti Tipo assenza", options=TIPI_ASSENZA),
+                "FESTIVO": st.column_config.CheckboxColumn("Festivo"),
+            },
+            key=f"editor_tabella_{selected_key}",
+        )
+
+        if not locked:
+            edited_clean = edited.drop(columns=["SEP_1"]).copy().reset_index(drop=True)
+            hidden_cols = record["tabella"][
+                ["DATA", "ROW_STATUS"] + COLONNE_BASE_ALL + ["EDICOLA_ORE", "EDICOLA_€", "EDICOLA_TIPO_ASSENZA"]
+            ].copy().reset_index(drop=True)
+
+            merged = pd.concat([edited_clean, hidden_cols], axis=1)
+            merged = merged[
+                [
+                    "GIORNO_NUM",
+                    "DATA",
+                    "GIORNO_SETTIMANA",
+                    "DATA_VIEW",
+                    "EDICOLA_ORE",
+                    "EDICOLA_€",
+                    "EDICOLA_TIPO_ASSENZA",
+                    "MONDADORI_ORE",
+                    "MONDADORI_€",
+                    "MONDADORI_TIPO_ASSENZA",
+                    "GIUNTI_ORE",
+                    "GIUNTI_€",
+                    "GIUNTI_TIPO_ASSENZA",
+                    "FESTIVO",
+                    "ROW_STATUS",
+                    "BASE_EDICOLA_ORE",
+                    "BASE_MONDADORI_ORE",
+                    "BASE_GIUNTI_ORE",
+                ]
+            ]
+
+            merged, warnings = apply_step3_rules(
+                tabella=merged,
+                netto_ora=record["netto_ora"],
+                societa=record["societa"],
+                origine_master=normalize_upper(record["origine_master"]),
+            )
+
+            old_visible = display_df[visible_cols].copy().reset_index(drop=True)
+            new_display = merged.copy().reset_index(drop=True)
+            new_display.insert(6, "SEP_1", "│")
+            new_visible = new_display[visible_cols].copy().reset_index(drop=True)
+
+            record["tabella"] = merged
+            st.session_state["sheet_warnings"][selected_key] = warnings
+            update_sheet_totals(record)
+
+            if not new_visible.equals(old_visible):
+                st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+    st.markdown('<div class="table-title">Fondo foglio</div>', unsafe_allow_html=True)
+
+    col_b1, col_b2, col_b3, col_b4, col_b5 = st.columns(5)
+    with col_b1:
+        record["arretrati"] = st.number_input("€ arretrato", value=float(record["arretrati"]), step=0.50, disabled=locked)
+    with col_b2:
+        record["extra"] = st.number_input("€ extra", value=float(record["extra"]), step=0.50, disabled=locked)
+    with col_b3:
+        record["affiancamenti"] = st.number_input("€ affiancamento", value=float(record["affiancamenti"]), step=0.50, disabled=locked)
+    with col_b4:
+        record["domeniche"] = st.number_input("€ domeniche", value=float(record["domeniche"]), step=0.50, disabled=locked)
+    with col_b5:
+        record["rimborso"] = st.number_input("€ rimborso", value=float(record["rimborso"]), step=0.50, disabled=locked)
+
+    uploaded_docs = st.file_uploader(
+        "Allegati rimborso",
+        accept_multiple_files=True,
+        disabled=locked,
+        key=f"rimborso_upload_{selected_key}",
+    )
+    if uploaded_docs is not None:
+        record["rimborso_allegati"] = [file.name for file in uploaded_docs]
+
+    if record["rimborso_allegati"]:
+        st.caption("Allegati caricati: " + ", ".join(record["rimborso_allegati"]))
+
+    record["note_generali"] = st.text_area(
+        "NOTE GENERALI DEL MESE",
+        value=record["note_generali"],
+        height=130,
+        disabled=locked,
+    )
+
+    update_sheet_totals(record)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+    st.markdown('<div class="table-title">Totale finale</div>', unsafe_allow_html=True)
+
+    col_t1, col_t2 = st.columns([2, 1])
+    with col_t1:
+        st.markdown(
+            """
+            <div class="soft-note">
+                <b>Formula STEP 3</b><br>
+                TOT NETTO MESE = Tot attività + Arretrati + Extra + Affiancamenti + Domeniche + Rimborsi
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with col_t2:
+        st.metric("TOT NETTO MESE", f"€ {record['tot_netto_mese']:.2f}")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    col_reset1, col_reset2 = st.columns([1, 1])
+    with col_reset1:
+        if st.button("Azzera foglio presenza", disabled=locked, use_container_width=True):
+            clear_entire_sheet(record)
+            st.session_state["sheet_warnings"][selected_key] = []
+            st.rerun()
+    with col_reset2:
+        st.write("")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# =========================
 # APP
 # =========================
 
