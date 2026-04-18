@@ -2142,7 +2142,8 @@ def render_generation_page():
 
 # =========================
 # STEP 5 - CHIUSURA LOGICHE / FUNZIONI STEP 4
-# DA INCOLLARE SUBITO SOTTO LO STEP 4
+# SOSTITUTIVO COMPLETO
+# DA INCOLLARE AL POSTO DELLO STEP 5 ATTUALE
 # =========================
 
 calculate_sheet_stats_step3 = calculate_sheet_stats
@@ -2168,7 +2169,7 @@ def step5_allowed_activity_columns(origine_master: str):
 
 def step5_base_amount_for_row(df: pd.DataFrame, idx: int, netto_ora: float, societa: str, origine_master: str) -> float:
     totale = 0.0
-    for ore_col, _, _, base_col in step5_allowed_activity_columns(origine_master):
+    for _, _, _, base_col in step5_allowed_activity_columns(origine_master):
         base_ore = safe_float(df.at[idx, base_col])
         totale += calculate_row_amount(base_ore, netto_ora, bool(df.at[idx, "FESTIVO"]), societa)
     return round(totale, 2)
@@ -2179,6 +2180,31 @@ def step5_current_amount_for_row(df: pd.DataFrame, idx: int, origine_master: str
     for _, euro_col, _, _ in step5_allowed_activity_columns(origine_master):
         totale += safe_float(df.at[idx, euro_col])
     return round(totale, 2)
+
+
+def step5_drop_widget_state(selected_key: str):
+    keys_to_drop = [
+        f"step5_societa_{selected_key}",
+        f"step5_nome_{selected_key}",
+        f"step5_cf_{selected_key}",
+        f"step5_pdv_{selected_key}",
+        f"step5_tipo_contratto_{selected_key}",
+        f"step5_scadenza_{selected_key}",
+        f"step5_netto_ora_{selected_key}",
+        f"step5_lock_foglio_{selected_key}",
+        f"step5_lock_mese_{selected_key}",
+        f"step5_arretrati_{selected_key}",
+        f"step5_extra_{selected_key}",
+        f"step5_affiancamenti_{selected_key}",
+        f"step5_domeniche_{selected_key}",
+        f"step5_rimborso_{selected_key}",
+        f"step5_rimborso_upload_{selected_key}",
+        f"step5_note_generali_{selected_key}",
+        f"step5_editor_tabella_{selected_key}",
+    ]
+    for key in keys_to_drop:
+        if key in st.session_state:
+            del st.session_state[key]
 
 
 def get_row_status(df: pd.DataFrame, idx: int) -> str:
@@ -2227,7 +2253,7 @@ def update_data_view(df: pd.DataFrame) -> pd.DataFrame:
         prefix = []
         if selected_day:
             prefix.append("🟨")
-        if status == "RIDOTTA" or status == "MODIFICATA":
+        if status in {"RIDOTTA", "MODIFICATA"}:
             prefix.append("🔴")
         elif status == "AUMENTATA":
             prefix.append("🔵")
@@ -2515,19 +2541,19 @@ def render_sheet_page():
     with col_h3:
         record["tipo_contratto"] = st.text_input("Tipo contratto", value=record["tipo_contratto"], disabled=locked, key=f"step5_tipo_contratto_{selected_key}")
         record["scadenza_contratto"] = st.text_input("Scadenza contratto", value=record["scadenza_contratto"], disabled=locked, key=f"step5_scadenza_{selected_key}")
-        st.number_input("NETTO MESE", value=float(record["netto_mese"]), step=0.50, disabled=True, key=f"step5_netto_mese_{selected_key}")
+        st.metric("NETTO MESE", f"€ {record['netto_mese']:.2f}")
     with col_h4:
         record["netto_ora"] = st.number_input("Netto orario", value=float(record["netto_ora"]), step=0.10, disabled=locked, key=f"step5_netto_ora_{selected_key}")
-        st.number_input("Giorni lavorati", value=int(record["giorni_lavorati"]), disabled=True, key=f"step5_giorni_lavorati_{selected_key}")
-        st.number_input("Giorni modificati", value=int(record["giorni_modificati"]), disabled=True, key=f"step5_giorni_modificati_{selected_key}")
+        st.metric("Giorni lavorati", f"{int(record['giorni_lavorati'])}")
+        st.metric("Giorni modificati", f"{int(record['giorni_modificati'])}")
 
     col_h5, col_h6, col_h7 = st.columns(3)
     with col_h5:
-        st.number_input("Tot ore lavorative mese", value=float(record["tot_ore_lavorative_mese"]), disabled=True, key=f"step5_tot_ore_{selected_key}")
+        st.metric("Tot ore lavorative mese", f"{float(record['tot_ore_lavorative_mese']):.2f}")
     with col_h6:
-        st.number_input("Tot ore azzerate", value=float(record["tot_ore_azzerate"]), disabled=True, key=f"step5_tot_ore_azz_{selected_key}")
+        st.metric("Tot ore azzerate", f"{float(record['tot_ore_azzerate']):.2f}")
     with col_h7:
-        st.number_input("Tot € da scalare", value=float(record["tot_euro_da_scalare"]), disabled=True, key=f"step5_tot_scalare_{selected_key}")
+        st.metric("Tot € da scalare", f"€ {float(record['tot_euro_da_scalare']):.2f}")
 
     col_lock1, col_lock2 = st.columns(2)
     with col_lock1:
@@ -2753,17 +2779,11 @@ def render_sheet_page():
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
     st.markdown('<div class="table-title">Fondo foglio</div>', unsafe_allow_html=True)
 
-    col_b1, col_b2, col_b3, col_b4, col_b5 = st.columns(5)
-    with col_b1:
-        record["arretrati"] = st.number_input("€ arretrato", value=float(record["arretrati"]), step=0.50, disabled=locked, key=f"step5_arretrati_{selected_key}")
-    with col_b2:
-        record["extra"] = st.number_input("€ extra", value=float(record["extra"]), step=0.50, disabled=locked, key=f"step5_extra_{selected_key}")
-    with col_b3:
-        record["affiancamenti"] = st.number_input("€ affiancamento", value=float(record["affiancamenti"]), step=0.50, disabled=locked, key=f"step5_affiancamenti_{selected_key}")
-    with col_b4:
-        record["domeniche"] = st.number_input("€ domeniche", value=float(record["domeniche"]), step=0.50, disabled=locked, key=f"step5_domeniche_{selected_key}")
-    with col_b5:
-        record["rimborso"] = st.number_input("€ rimborso", value=float(record["rimborso"]), step=0.50, disabled=locked, key=f"step5_rimborso_{selected_key}")
+    record["arretrati"] = st.number_input("€ arretrato", value=float(record["arretrati"]), step=0.50, disabled=locked, key=f"step5_arretrati_{selected_key}")
+    record["extra"] = st.number_input("€ extra", value=float(record["extra"]), step=0.50, disabled=locked, key=f"step5_extra_{selected_key}")
+    record["affiancamenti"] = st.number_input("€ affiancamento", value=float(record["affiancamenti"]), step=0.50, disabled=locked, key=f"step5_affiancamenti_{selected_key}")
+    record["domeniche"] = st.number_input("€ domeniche", value=float(record["domeniche"]), step=0.50, disabled=locked, key=f"step5_domeniche_{selected_key}")
+    record["rimborso"] = st.number_input("€ rimborso", value=float(record["rimborso"]), step=0.50, disabled=locked, key=f"step5_rimborso_{selected_key}")
 
     uploaded_docs = st.file_uploader(
         "Allegati rimborso",
@@ -2812,6 +2832,7 @@ def render_sheet_page():
         if st.button("Azzera foglio presenza", disabled=locked, use_container_width=True, key=f"step5_azzera_{selected_key}"):
             clear_entire_sheet(record)
             st.session_state["sheet_warnings"][selected_key] = []
+            step5_drop_widget_state(selected_key)
             st.rerun()
     with col_reset2:
         st.write("")
