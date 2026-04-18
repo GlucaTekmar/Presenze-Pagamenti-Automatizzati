@@ -2422,6 +2422,7 @@ def update_sheet_totals(record: dict):
         2,
     )
 
+
 def clear_entire_sheet(record: dict):
     df = record["tabella"].copy()
 
@@ -2440,8 +2441,6 @@ def clear_entire_sheet(record: dict):
         + safe_float(record["rimborso"]),
         2,
     )
-
-    totale_euro_azzerato = round(corpo_euro_azzerato + fondo_euro_azzerato, 2)
 
     df["EDICOLA_ORE"] = 0.0
     df["EDICOLA_€"] = 0.0
@@ -2467,7 +2466,7 @@ def clear_entire_sheet(record: dict):
 
     update_sheet_totals(record)
 
-    record["tot_euro_da_scalare"] = totale_euro_azzerato
+    record["tot_euro_da_scalare"] = round(corpo_euro_azzerato + fondo_euro_azzerato, 2)
 
 
 def render_sheet_page():
@@ -2787,6 +2786,15 @@ def render_sheet_page():
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
     st.markdown('<div class="table-title">Fondo foglio</div>', unsafe_allow_html=True)
 
+    prev_fondo_values = (
+        float(record["arretrati"]),
+        float(record["extra"]),
+        float(record["affiancamenti"]),
+        float(record["domeniche"]),
+        float(record["rimborso"]),
+        record["note_generali"],
+    )
+
     col_b1, col_b2, col_b3, col_b4, col_b5 = st.columns(5)
     with col_b1:
         record["arretrati"] = st.number_input("€ arretrato", value=float(record["arretrati"]), step=0.50, disabled=locked, key=f"step5_arretrati_{selected_key}")
@@ -2820,6 +2828,19 @@ def render_sheet_page():
     )
 
     update_sheet_totals(record)
+
+    new_fondo_values = (
+        float(record["arretrati"]),
+        float(record["extra"]),
+        float(record["affiancamenti"]),
+        float(record["domeniche"]),
+        float(record["rimborso"]),
+        record["note_generali"],
+    )
+
+    if new_fondo_values != prev_fondo_values:
+        st.rerun()
+
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
@@ -2843,25 +2864,18 @@ def render_sheet_page():
 
     col_reset1, col_reset2 = st.columns([1, 1])
 
-with col_reset1:
-    if st.button("Azzera foglio presenza", disabled=locked, use_container_width=True, key=f"step5_azzera_{selected_key}"):
-        clear_entire_sheet(record)
-        st.session_state["sheet_warnings"][selected_key] = []
+    with col_reset1:
+        if st.button("Azzera foglio presenza", disabled=locked, use_container_width=True, key=f"step5_azzera_{selected_key}"):
+            clear_entire_sheet(record)
+            st.session_state["sheet_warnings"][selected_key] = []
 
-        st.session_state[f"step5_arretrati_{selected_key}"] = 0.0
-        st.session_state[f"step5_extra_{selected_key}"] = 0.0
-        st.session_state[f"step5_affiancamenti_{selected_key}"] = 0.0
-        st.session_state[f"step5_domeniche_{selected_key}"] = 0.0
-        st.session_state[f"step5_rimborso_{selected_key}"] = 0.0
-        st.session_state[f"step5_note_generali_{selected_key}"] = ""
+            step5_drop_widget_state(selected_key)
+            st.rerun()
 
-        step5_drop_widget_state(selected_key)
-        st.rerun()
+    with col_reset2:
+        st.write("")
 
-with col_reset2:
-    st.write("")
-
-st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================
 # APP
