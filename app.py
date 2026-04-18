@@ -2842,7 +2842,8 @@ def render_sheet_page():
     st.markdown("</div>", unsafe_allow_html=True)
 
     col_reset1, col_reset2 = st.columns([1, 1])
-    with col_reset1:
+
+with col_reset1:
     if st.button("Azzera foglio presenza", disabled=locked, use_container_width=True, key=f"step5_azzera_{selected_key}"):
         clear_entire_sheet(record)
         st.session_state["sheet_warnings"][selected_key] = []
@@ -2856,10 +2857,11 @@ def render_sheet_page():
 
         step5_drop_widget_state(selected_key)
         st.rerun()
-    with col_reset2:
-        st.write("")
 
-    st.markdown("</div>", unsafe_allow_html=True)
+with col_reset2:
+    st.write("")
+
+st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================
 # APP
