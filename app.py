@@ -2422,9 +2422,26 @@ def update_sheet_totals(record: dict):
         2,
     )
 
-
 def clear_entire_sheet(record: dict):
     df = record["tabella"].copy()
+
+    corpo_euro_azzerato = round(
+        df["EDICOLA_€"].apply(safe_float).sum()
+        + df["MONDADORI_€"].apply(safe_float).sum()
+        + df["GIUNTI_€"].apply(safe_float).sum(),
+        2,
+    )
+
+    fondo_euro_azzerato = round(
+        safe_float(record["arretrati"])
+        + safe_float(record["extra"])
+        + safe_float(record["affiancamenti"])
+        + safe_float(record["domeniche"])
+        + safe_float(record["rimborso"]),
+        2,
+    )
+
+    totale_euro_azzerato = round(corpo_euro_azzerato + fondo_euro_azzerato, 2)
 
     df["EDICOLA_ORE"] = 0.0
     df["EDICOLA_€"] = 0.0
@@ -2449,6 +2466,8 @@ def clear_entire_sheet(record: dict):
     record["note_generali"] = ""
 
     update_sheet_totals(record)
+
+    record["tot_euro_da_scalare"] = totale_euro_azzerato
 
 
 def render_sheet_page():
@@ -2824,11 +2843,19 @@ def render_sheet_page():
 
     col_reset1, col_reset2 = st.columns([1, 1])
     with col_reset1:
-        if st.button("Azzera foglio presenza", disabled=locked, use_container_width=True, key=f"step5_azzera_{selected_key}"):
-            clear_entire_sheet(record)
-            st.session_state["sheet_warnings"][selected_key] = []
-            step5_drop_widget_state(selected_key)
-            st.rerun()
+    if st.button("Azzera foglio presenza", disabled=locked, use_container_width=True, key=f"step5_azzera_{selected_key}"):
+        clear_entire_sheet(record)
+        st.session_state["sheet_warnings"][selected_key] = []
+
+        st.session_state[f"step5_arretrati_{selected_key}"] = 0.0
+        st.session_state[f"step5_extra_{selected_key}"] = 0.0
+        st.session_state[f"step5_affiancamenti_{selected_key}"] = 0.0
+        st.session_state[f"step5_domeniche_{selected_key}"] = 0.0
+        st.session_state[f"step5_rimborso_{selected_key}"] = 0.0
+        st.session_state[f"step5_note_generali_{selected_key}"] = ""
+
+        step5_drop_widget_state(selected_key)
+        st.rerun()
     with col_reset2:
         st.write("")
 
