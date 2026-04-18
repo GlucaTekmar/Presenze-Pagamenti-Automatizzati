@@ -2329,7 +2329,7 @@ def apply_step3_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, ori
     return df, warnings
 
 
-def calculate_sheet_stats(df: pd.DataFrame, origine_master: str, netto_ora: float = 0.0, societa: str = "", fondo_euro: float = 0.0) -> dict:
+def calculate_sheet_stats(df: pd.DataFrame, origine_master: str, netto_ora: float = 0.0, societa: str = "") -> dict:
     if not step5_is_step4_dataframe(df):
         return calculate_sheet_stats_step3(df, origine_master)
 
@@ -2376,14 +2376,13 @@ def calculate_sheet_stats(df: pd.DataFrame, origine_master: str, netto_ora: floa
         riduzioni_euro += max(0.0, round(base_euro - current_euro, 2))
 
     tot_attivita = round(sum(current_euro_list), 2)
-    tot_euro_da_scalare = round(riduzioni_euro + safe_float(fondo_euro), 2)
 
     return {
         "GIORNI_LAVORATI": giorni_lavorati,
         "GIORNI_MODIFICATI": giorni_modificati,
         "TOT_ORE_LAVORATIVE_MESE": tot_ore,
         "TOT_ORE_AZZERATE": tot_ore_azzerate,
-        "TOT_€_DA_SCALARE": tot_euro_da_scalare,
+        "TOT_€_DA_SCALARE": round(riduzioni_euro, 2),
         "TOT_ATTIVITA_€": tot_attivita,
     }
 
@@ -2396,21 +2395,11 @@ def update_sheet_totals(record: dict):
         origine_master=normalize_upper(record["origine_master"]),
     )
 
-    fondo_euro = round(
-        safe_float(record["arretrati"])
-        + safe_float(record["extra"])
-        + safe_float(record["affiancamenti"])
-        + safe_float(record["domeniche"])
-        + safe_float(record["rimborso"]),
-        2,
-    )
-
     stats = calculate_sheet_stats(
         df=record["tabella"],
         origine_master=normalize_upper(record["origine_master"]),
         netto_ora=record["netto_ora"],
         societa=record["societa"],
-        fondo_euro=fondo_euro,
     )
 
     record["giorni_lavorati"] = stats["GIORNI_LAVORATI"]
@@ -2661,12 +2650,12 @@ def render_sheet_page():
                 societa=record["societa"],
                 origine_master=normalize_upper(record["origine_master"]),
             )
-            new_visible = merged[visible_cols].copy().reset_index(drop=True)
 
             record["tabella"] = merged
             st.session_state["sheet_warnings"][selected_key] = warnings
             update_sheet_totals(record)
 
+            new_visible = merged[visible_cols].copy().reset_index(drop=True)
             if not new_visible.equals(old_visible):
                 st.rerun()
     else:
@@ -2763,13 +2752,13 @@ def render_sheet_page():
                 origine_master=normalize_upper(record["origine_master"]),
             )
 
-            new_display = merged.copy().reset_index(drop=True)
-            new_display.insert(6, "SEP_1", "│")
-            new_visible = new_display[visible_cols].copy().reset_index(drop=True)
-
             record["tabella"] = merged
             st.session_state["sheet_warnings"][selected_key] = warnings
             update_sheet_totals(record)
+
+            new_display = merged.copy().reset_index(drop=True)
+            new_display.insert(6, "SEP_1", "│")
+            new_visible = new_display[visible_cols].copy().reset_index(drop=True)
 
             if not new_visible.equals(old_visible):
                 st.rerun()
@@ -2779,11 +2768,17 @@ def render_sheet_page():
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
     st.markdown('<div class="table-title">Fondo foglio</div>', unsafe_allow_html=True)
 
-    record["arretrati"] = st.number_input("€ arretrato", value=float(record["arretrati"]), step=0.50, disabled=locked, key=f"step5_arretrati_{selected_key}")
-    record["extra"] = st.number_input("€ extra", value=float(record["extra"]), step=0.50, disabled=locked, key=f"step5_extra_{selected_key}")
-    record["affiancamenti"] = st.number_input("€ affiancamento", value=float(record["affiancamenti"]), step=0.50, disabled=locked, key=f"step5_affiancamenti_{selected_key}")
-    record["domeniche"] = st.number_input("€ domeniche", value=float(record["domeniche"]), step=0.50, disabled=locked, key=f"step5_domeniche_{selected_key}")
-    record["rimborso"] = st.number_input("€ rimborso", value=float(record["rimborso"]), step=0.50, disabled=locked, key=f"step5_rimborso_{selected_key}")
+    col_b1, col_b2, col_b3, col_b4, col_b5 = st.columns(5)
+    with col_b1:
+        record["arretrati"] = st.number_input("€ arretrato", value=float(record["arretrati"]), step=0.50, disabled=locked, key=f"step5_arretrati_{selected_key}")
+    with col_b2:
+        record["extra"] = st.number_input("€ extra", value=float(record["extra"]), step=0.50, disabled=locked, key=f"step5_extra_{selected_key}")
+    with col_b3:
+        record["affiancamenti"] = st.number_input("€ affiancamento", value=float(record["affiancamenti"]), step=0.50, disabled=locked, key=f"step5_affiancamenti_{selected_key}")
+    with col_b4:
+        record["domeniche"] = st.number_input("€ domeniche", value=float(record["domeniche"]), step=0.50, disabled=locked, key=f"step5_domeniche_{selected_key}")
+    with col_b5:
+        record["rimborso"] = st.number_input("€ rimborso", value=float(record["rimborso"]), step=0.50, disabled=locked, key=f"step5_rimborso_{selected_key}")
 
     uploaded_docs = st.file_uploader(
         "Allegati rimborso",
