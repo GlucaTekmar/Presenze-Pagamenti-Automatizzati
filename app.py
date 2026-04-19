@@ -2494,21 +2494,22 @@ def render_sheet_page():
         record["pdv"] = st.text_input("PDV", value=record["pdv"], disabled=locked, key=f"step5_pdv_{selected_key}")
         st.text_input("Mese", value=f"{MESI[record['mese']]} {record['anno']}", disabled=True, key=f"step5_mese_{selected_key}")
     with col_h3:
-        record["tipo_contratto"] = st.text_input("Tipo contratto", value=record["tipo_contratto"], disabled=locked, key=f"step5_tipo_contratto_{selected_key}")
-        record["scadenza_contratto"] = st.text_input("Scadenza contratto", value=record["scadenza_contratto"], disabled=locked, key=f"step5_scadenza_{selected_key}")
-        st.metric("NETTO MESE", f"€ {record['netto_mese']:.2f}")
+    record["tipo_contratto"] = st.text_input("Tipo contratto", value=record["tipo_contratto"], disabled=locked, key=f"step5_tipo_contratto_{selected_key}")
+    record["scadenza_contratto"] = st.text_input("Scadenza contratto", value=record["scadenza_contratto"], disabled=locked, key=f"step5_scadenza_{selected_key}")
+    st.text_input("NETTO MESE", value=f"€ {record['netto_mese']:.2f}", disabled=True, key=f"step5_netto_mese_view_{selected_key}")
+
     with col_h4:
-        record["netto_ora"] = st.number_input("Netto orario", value=float(record["netto_ora"]), step=0.10, disabled=locked, key=f"step5_netto_ora_{selected_key}")
-        st.metric("Giorni lavorati", f"{int(record['giorni_lavorati'])}")
-        st.metric("Giorni modificati", f"{int(record['giorni_modificati'])}")
+    record["netto_ora"] = st.number_input("Netto orario", value=float(record["netto_ora"]), step=0.10, disabled=locked, key=f"step5_netto_ora_{selected_key}")
+    st.text_input("Giorni lavorati", value=str(int(record["giorni_lavorati"])), disabled=True, key=f"step5_giorni_lavorati_view_{selected_key}")
+    st.text_input("Giorni modificati", value=str(int(record["giorni_modificati"])), disabled=True, key=f"step5_giorni_modificati_view_{selected_key}")
 
     col_h5, col_h6, col_h7 = st.columns(3)
     with col_h5:
-        st.metric("Tot ore lavorative mese", f"{float(record['tot_ore_lavorative_mese']):.2f}")
+    st.text_input("Tot ore lavorative mese", value=f"{float(record['tot_ore_lavorative_mese']):.2f}", disabled=True, key=f"step5_tot_ore_view_{selected_key}")
     with col_h6:
-        st.metric("Tot ore azzerate", f"{float(record['tot_ore_azzerate']):.2f}")
+    st.text_input("Tot ore azzerate", value=f"{float(record['tot_ore_azzerate']):.2f}", disabled=True, key=f"step5_tot_ore_azz_view_{selected_key}")
     with col_h7:
-        st.metric("Tot € da scalare", f"€ {float(record['tot_euro_da_scalare']):.2f}")
+    st.text_input("Tot € da scalare", value=f"€ {float(record['tot_euro_da_scalare']):.2f}", disabled=True, key=f"step5_tot_scalare_view_{selected_key}")
 
     col_lock1, col_lock2 = st.columns(2)
     with col_lock1:
