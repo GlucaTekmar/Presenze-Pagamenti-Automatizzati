@@ -569,7 +569,6 @@ def build_generation_table(df_edicola: pd.DataFrame, df_libri: pd.DataFrame) -> 
     result = result.sort_values(["ORIGINE_MASTER", "NOME", "SOCIETA", "PDV", "TIPO_LIBRI"]).reset_index(drop=True)
     return result
 
-
 # =========================
 # COSTRUZIONE FOGLIO
 # =========================
@@ -731,28 +730,57 @@ def apply_step3_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, ori
     return df, warnings
 
 
-def calculate_sheet_stats(df: pd.DataFrame, origine_master: str) -> dict:
+def calculate_sheet_stats(df: pd.DataFrame, origine_master: str, netto_ora: float = 0.0, societa: str = "") -> dict:
     if origine_master == ORIGINE_EDICOLA:
         current_hours = df["EDICOLA_ORE"].apply(safe_float)
         base_hours = df["BASE_EDICOLA_ORE"].apply(safe_float)
-        euro_sum = df["EDICOLA_€"].apply(safe_float).sum()
+
+        current_euro_series = df["EDICOLA_€"].apply(safe_float)
+        base_euro_series = df.apply(
+            lambda row: calculate_row_amount(
+                safe_float(row["BASE_EDICOLA_ORE"]),
+                netto_ora,
+                bool(row["FESTIVO"]),
+                societa,
+            ),
+            axis=1,
+        )
     else:
         current_hours = df["MONDADORI_ORE"].apply(safe_float) + df["GIUNTI_ORE"].apply(safe_float)
         base_hours = df["BASE_MONDADORI_ORE"].apply(safe_float) + df["BASE_GIUNTI_ORE"].apply(safe_float)
-        euro_sum = df["MONDADORI_€"].apply(safe_float).sum() + df["GIUNTI_€"].apply(safe_float).sum()
+
+        current_euro_series = df["MONDADORI_€"].apply(safe_float) + df["GIUNTI_€"].apply(safe_float)
+        base_euro_series = df.apply(
+            lambda row: (
+                calculate_row_amount(
+                    safe_float(row["BASE_MONDADORI_ORE"]),
+                    netto_ora,
+                    bool(row["FESTIVO"]),
+                    societa,
+                )
+                + calculate_row_amount(
+                    safe_float(row["BASE_GIUNTI_ORE"]),
+                    netto_ora,
+                    bool(row["FESTIVO"]),
+                    societa,
+                )
+            ),
+            axis=1,
+        )
 
     giorni_lavorati = int((current_hours > 0).sum())
     giorni_modificati = int((df["ROW_STATUS"].astype(str).str.strip() != "").sum())
     tot_ore = round(current_hours.sum(), 2)
-    tot_ore_azzerate = round((base_hours - current_hours).sum(), 2)
-    tot_euro = round(euro_sum, 2)
+    tot_ore_azzerate = round((base_hours - current_hours).clip(lower=0).sum(), 2)
+    tot_euro = round(current_euro_series.sum(), 2)
+    riduzioni_euro = round((base_euro_series - current_euro_series).clip(lower=0).sum(), 2)
 
     return {
         "GIORNI_LAVORATI": giorni_lavorati,
         "GIORNI_MODIFICATI": giorni_modificati,
         "TOT_ORE_LAVORATIVE_MESE": tot_ore,
         "TOT_ORE_AZZERATE": tot_ore_azzerate,
-        "TOT_€_DA_SCALARE": 0.0,
+        "TOT_€_DA_SCALARE": riduzioni_euro,
         "TOT_ATTIVITA_€": tot_euro,
     }
 
@@ -777,7 +805,12 @@ def init_sheet_record(
         societa=normalize_text(row["SOCIETA"]),
         origine_master=normalize_upper(row["ORIGINE_MASTER"]),
     )
-    stats = calculate_sheet_stats(tabella, normalize_upper(row["ORIGINE_MASTER"]))
+    stats = calculate_sheet_stats(
+        tabella,
+        normalize_upper(row["ORIGINE_MASTER"]),
+        netto_ora=safe_float(row["NETTO_ORA"]),
+        societa=normalize_text(row["SOCIETA"]),
+    )
 
     record = {
         "row_id": normalize_text(row["ROW_ID"]),
@@ -825,7 +858,12 @@ def update_sheet_totals(record: dict):
         societa=record["societa"],
         origine_master=normalize_upper(record["origine_master"]),
     )
-    stats = calculate_sheet_stats(record["tabella"], normalize_upper(record["origine_master"]))
+    stats = calculate_sheet_stats(
+        record["tabella"],
+        normalize_upper(record["origine_master"]),
+        netto_ora=record["netto_ora"],
+        societa=record["societa"],
+    )
     record["giorni_lavorati"] = stats["GIORNI_LAVORATI"]
     record["giorni_modificati"] = stats["GIORNI_MODIFICATI"]
     record["tot_ore_lavorative_mese"] = stats["TOT_ORE_LAVORATIVE_MESE"]
@@ -877,7 +915,6 @@ def clear_entire_sheet(record: dict):
         origine_master=normalize_upper(record["origine_master"]),
     )
     update_sheet_totals(record)
-
 
 # =========================
 # SESSIONE
