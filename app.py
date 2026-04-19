@@ -2386,17 +2386,31 @@ def update_sheet_totals(record: dict):
     record["tot_attivita"] = stats["TOT_ATTIVITA_€"]
 
     if record.get("is_step4", False):
-        record["netto_mese"] = round(stats["TOT_ATTIVITA_€"], 2)
+        if not record.get("netto_mese_bloccato", False):
+            if round(stats["TOT_ATTIVITA_€"], 2) > 0:
+                record["netto_mese"] = round(stats["TOT_ATTIVITA_€"], 2)
+                record["netto_mese_bloccato"] = True
 
-    record["tot_netto_mese"] = round(
-        safe_float(record["tot_attivita"])
-        + safe_float(record["arretrati"])
-        + safe_float(record["extra"])
-        + safe_float(record["affiancamenti"])
-        + safe_float(record["domeniche"])
-        + safe_float(record["rimborso"]),
-        2,
-    )
+        record["tot_netto_mese"] = round(
+            safe_float(record["netto_mese"])
+            - safe_float(record["tot_euro_da_scalare"])
+            + safe_float(record["arretrati"])
+            + safe_float(record["extra"])
+            + safe_float(record["affiancamenti"])
+            + safe_float(record["domeniche"])
+            + safe_float(record["rimborso"]),
+            2,
+        )
+    else:
+        record["tot_netto_mese"] = round(
+            safe_float(record["tot_attivita"])
+            + safe_float(record["arretrati"])
+            + safe_float(record["extra"])
+            + safe_float(record["affiancamenti"])
+            + safe_float(record["domeniche"])
+            + safe_float(record["rimborso"]),
+            2,
+        )
 
 
 def clear_entire_sheet(record: dict):
@@ -2461,6 +2475,9 @@ def render_sheet_page():
         render_sheet_page_step3()
         return
 
+    if "netto_mese_bloccato" not in record:
+        record["netto_mese_bloccato"] = round(safe_float(record.get("netto_mese", 0.0)), 2) > 0
+
     locked = record["lucchetto_mese"] or record["lucchetto_foglio"]
 
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
@@ -2489,29 +2506,29 @@ def render_sheet_page():
     col_h1, col_h2, col_h3, col_h4 = st.columns(4)
     with col_h1:
         record["societa"] = st.text_input("Società", value=record["societa"], disabled=locked, key=f"step5_societa_{selected_key}")
-        st.text_input("Attività", value=record["attivita_riga"], disabled=True, key=f"step5_attivita_{selected_key}")
+        st.text_input("Attività", value=record["attivita_riga"], disabled=True)
         record["nome"] = st.text_input("Nome", value=record["nome"], disabled=locked, key=f"step5_nome_{selected_key}")
     with col_h2:
         record["cf"] = st.text_input("CF", value=record["cf"], disabled=locked, key=f"step5_cf_{selected_key}")
         record["pdv"] = st.text_input("PDV", value=record["pdv"], disabled=locked, key=f"step5_pdv_{selected_key}")
-        st.text_input("Mese", value=f"{MESI[record['mese']]} {record['anno']}", disabled=True, key=f"step5_mese_{selected_key}")
+        st.text_input("Mese", value=f"{MESI[record['mese']]} {record['anno']}", disabled=True)
     with col_h3:
         record["tipo_contratto"] = st.text_input("Tipo contratto", value=record["tipo_contratto"], disabled=locked, key=f"step5_tipo_contratto_{selected_key}")
         record["scadenza_contratto"] = st.text_input("Scadenza contratto", value=record["scadenza_contratto"], disabled=locked, key=f"step5_scadenza_{selected_key}")
-        st.text_input("NETTO MESE", value=f"€ {record['netto_mese']:.2f}", disabled=True, key=f"step5_netto_mese_view_{selected_key}")
+        st.text_input("NETTO MESE", value=f"€ {record['netto_mese']:.2f}", disabled=True)
 
     with col_h4:
         record["netto_ora"] = st.number_input("Netto orario", value=float(record["netto_ora"]), step=0.10, disabled=locked, key=f"step5_netto_ora_{selected_key}")
-        st.text_input("Giorni lavorati", value=str(int(record["giorni_lavorati"])), disabled=True, key=f"step5_giorni_lavorati_view_{selected_key}")
-        st.text_input("Giorni modificati", value=str(int(record["giorni_modificati"])), disabled=True, key=f"step5_giorni_modificati_view_{selected_key}")
+        st.text_input("Giorni lavorati", value=str(int(record["giorni_lavorati"])), disabled=True)
+        st.text_input("Giorni modificati", value=str(int(record["giorni_modificati"])), disabled=True)
 
     col_h5, col_h6, col_h7 = st.columns(3)
     with col_h5:
-        st.text_input("Tot ore lavorative mese", value=f"{float(record['tot_ore_lavorative_mese']):.2f}", disabled=True, key=f"step5_tot_ore_view_{selected_key}")
+        st.text_input("Tot ore lavorative mese", value=f"{float(record['tot_ore_lavorative_mese']):.2f}", disabled=True)
     with col_h6:
-        st.text_input("Tot ore azzerate", value=f"{float(record['tot_ore_azzerate']):.2f}", disabled=True, key=f"step5_tot_ore_azz_view_{selected_key}")
+        st.text_input("Tot ore azzerate", value=f"{float(record['tot_ore_azzerate']):.2f}", disabled=True)
     with col_h7:
-        st.text_input("Tot € da scalare", value=f"€ {float(record['tot_euro_da_scalare']):.2f}", disabled=True, key=f"step5_tot_scalare_view_{selected_key}")
+        st.text_input("Tot € da scalare", value=f"€ {float(record['tot_euro_da_scalare']):.2f}", disabled=True)
 
     col_lock1, col_lock2 = st.columns(2)
     with col_lock1:
@@ -2805,7 +2822,7 @@ def render_sheet_page():
             """
             <div class="soft-note">
                 <b>Formula STEP 4/5</b><br>
-                TOT NETTO MESE = Netto Mese + Arretrati + Extra + Affiancamenti + Domeniche + Rimborsi
+                TOT NETTO MESE = Netto Mese - Tot € da scalare + Arretrati + Extra + Affiancamenti + Domeniche + Rimborsi
             </div>
             """,
             unsafe_allow_html=True,
