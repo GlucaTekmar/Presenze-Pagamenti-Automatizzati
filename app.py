@@ -2846,6 +2846,270 @@ def render_sheet_page():
     st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================
+# STEP 5,25 - AZZERAMENTO MASSIVO
+# DA INCOLLARE SUBITO SOTTO LO STEP 5
+# =========================
+
+render_generation_page_step45 = render_generation_page
+
+
+def step525_get_selected_days(anno: int, mese: int, modo: str, giorno_singolo_value, periodo_value) -> list[int]:
+    if modo == "Giorno singolo":
+        if giorno_singolo_value is None:
+            return []
+        if giorno_singolo_value.year != anno or giorno_singolo_value.month != mese:
+            return []
+        return [int(giorno_singolo_value.day)]
+
+    if not periodo_value or len(periodo_value) != 2:
+        return []
+
+    data_inizio, data_fine = periodo_value
+    if not data_inizio or not data_fine:
+        return []
+
+    if data_inizio > data_fine:
+        return []
+
+    primo_giorno = date(anno, mese, 1)
+    ultimo_giorno = date(anno, mese, calendar.monthrange(anno, mese)[1])
+
+    if data_inizio < primo_giorno or data_fine > ultimo_giorno:
+        return []
+
+    giorni = []
+    current = data_inizio
+    while current <= data_fine:
+        giorni.append(current.day)
+        current = date.fromordinal(current.toordinal() + 1)
+
+    return giorni
+
+
+def step525_days_text(selected_days: list[int]) -> str:
+    if not selected_days:
+        return ""
+    if len(selected_days) == 1:
+        return f"Giorno {selected_days[0]}"
+    return f"Giorni da {min(selected_days)} a {max(selected_days)}"
+
+
+def step525_build_massive_table(anno: int, mese: int, societa: str, attivita: str) -> pd.DataFrame:
+    righe = []
+    societa_up = normalize_upper(societa)
+    attivita_up = normalize_upper(attivita)
+
+    for key, record in st.session_state["fogli_generati"].items():
+        if int(record.get("anno", 0)) != int(anno):
+            continue
+        if int(record.get("mese", 0)) != int(mese):
+            continue
+        if normalize_upper(record.get("societa", "")) != societa_up:
+            continue
+        if normalize_upper(record.get("origine_master", "")) != attivita_up:
+            continue
+
+        tipo_attivita = "EDICOLA" if attivita_up == ORIGINE_EDICOLA else "LIBRI"
+
+        righe.append(
+            {
+                "SELEZIONA": False,
+                "FOGLIO_KEY": key,
+                "NOMINATIVO_DIPENDENTE": normalize_text(record.get("nome", "")),
+                "PDV": normalize_text(record.get("pdv", "")),
+                "SOCIETA": normalize_text(record.get("societa", "")),
+                "TIPO_ATTIVITA": tipo_attivita,
+            }
+        )
+
+    return pd.DataFrame(righe)
+
+
+def step525_zero_selected_days_on_record(record: dict, selected_days: list[int]):
+    df = record["tabella"].copy()
+    origine_master = normalize_upper(record["origine_master"])
+
+    for idx in df.index:
+        giorno_num = int(df.at[idx, "GIORNO_NUM"])
+        if giorno_num not in selected_days:
+            continue
+
+        if origine_master == ORIGINE_EDICOLA:
+            df.at[idx, "EDICOLA_ORE"] = 0.0
+            df.at[idx, "EDICOLA_€"] = 0.0
+        else:
+            df.at[idx, "MONDADORI_ORE"] = 0.0
+            df.at[idx, "MONDADORI_€"] = 0.0
+            df.at[idx, "GIUNTI_ORE"] = 0.0
+            df.at[idx, "GIUNTI_€"] = 0.0
+
+    record["tabella"] = df
+    update_sheet_totals(record)
+
+
+def render_generation_page():
+    render_generation_page_step45()
+
+    if not st.session_state.get("master_loaded", False):
+        return
+
+    anno = int(st.session_state.get("anno_step3", date.today().year))
+    mese = int(st.session_state.get("mese_step3", date.today().month))
+
+    societa_options = sorted(
+        list(
+            set(
+                st.session_state["df_edicola"]["AGENZIA"].dropna().astype(str).str.strip().tolist()
+                + st.session_state["df_libri"]["AGENZIA"].dropna().astype(str).str.strip().tolist()
+            )
+        )
+    )
+
+    if not societa_options:
+        return
+
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
+    st.markdown('<div class="step4-action-box">', unsafe_allow_html=True)
+    st.markdown('<div class="step4-action-title">AZZERAMENTO MASSIVO</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="step4-action-subtitle">Azzera le ore di più fogli presenza insieme senza aprirli uno per uno</div>',
+        unsafe_allow_html=True,
+    )
+
+    col_m1, col_m2 = st.columns(2)
+    with col_m1:
+        step525_societa = st.selectbox("Società", societa_options, key="step525_societa")
+    with col_m2:
+        step525_attivita = st.selectbox("Attività", [ORIGINE_EDICOLA, ORIGINE_LIBRI], key="step525_attivita")
+
+    col_m3, col_m4 = st.columns(2)
+    with col_m3:
+        step525_tipo_giorno = st.selectbox(
+            "Giorno singolo oppure periodo",
+            ["Giorno singolo", "Periodo"],
+            key="step525_tipo_giorno",
+        )
+    with col_m4:
+        primo_giorno = date(anno, mese, 1)
+        ultimo_giorno = date(anno, mese, calendar.monthrange(anno, mese)[1])
+
+        giorno_singolo_value = None
+        periodo_value = None
+
+        if step525_tipo_giorno == "Giorno singolo":
+            giorno_singolo_value = st.date_input(
+                "Giorno singolo",
+                value=primo_giorno,
+                min_value=primo_giorno,
+                max_value=ultimo_giorno,
+                key="step525_giorno_singolo",
+            )
+        else:
+            periodo_value = st.date_input(
+                "Periodo",
+                value=(primo_giorno, primo_giorno),
+                min_value=primo_giorno,
+                max_value=ultimo_giorno,
+                key="step525_periodo",
+            )
+
+    selected_days = step525_get_selected_days(
+        anno=anno,
+        mese=mese,
+        modo=step525_tipo_giorno,
+        giorno_singolo_value=giorno_singolo_value,
+        periodo_value=periodo_value,
+    )
+
+    filtro_nome = st.text_input(
+        "Filtro tabella azzeramento massivo",
+        placeholder="Nome / cognome / pdv",
+        key="step525_filtro",
+    )
+
+    massive_table = step525_build_massive_table(
+        anno=anno,
+        mese=mese,
+        societa=step525_societa,
+        attivita=step525_attivita,
+    )
+
+    if filtro_nome.strip() and not massive_table.empty:
+        filtro_up = filtro_nome.strip().upper()
+        mask = (
+            massive_table["NOMINATIVO_DIPENDENTE"].str.upper().str.contains(filtro_up, na=False)
+            | massive_table["PDV"].str.upper().str.contains(filtro_up, na=False)
+        )
+        massive_table = massive_table[mask].copy()
+
+    st.markdown('<div class="separator-help"><b>Seleziona i fogli presenza da azzerare</b></div>', unsafe_allow_html=True)
+
+    if massive_table.empty:
+        st.info("Nessun foglio presenza coerente trovato per i criteri selezionati.")
+    else:
+        edited_massive = st.data_editor(
+            massive_table,
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            column_config={
+                "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
+                "FOGLIO_KEY": None,
+                "NOMINATIVO_DIPENDENTE": st.column_config.TextColumn("Nominativo dipendente", disabled=True),
+                "PDV": st.column_config.TextColumn("PDV", disabled=True),
+                "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
+                "TIPO_ATTIVITA": st.column_config.TextColumn("Tipo attività", disabled=True),
+            },
+            key="step525_massive_table",
+        )
+
+        selected_rows = edited_massive[edited_massive["SELEZIONA"] == True].copy()
+        count_selected = len(selected_rows)
+
+        if selected_days and count_selected > 0:
+            st.markdown(
+                f"""
+                <div class="soft-note">
+                    <b>Conferma operativa</b><br>
+                    Fogli selezionati: {count_selected}<br>
+                    Intervallo da azzerare: {step525_days_text(selected_days)}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        if st.button("AZZERA ORE", type="primary", use_container_width=True, key="step525_btn_azzera"):
+            if not selected_days:
+                st.error("Giorno o periodo non valido per il mese selezionato.")
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+                return
+
+            if count_selected == 0:
+                st.error("Seleziona almeno un foglio presenza dalla tabella.")
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+                return
+
+            for _, row in selected_rows.iterrows():
+                foglio_key = row["FOGLIO_KEY"]
+                if foglio_key not in st.session_state["fogli_generati"]:
+                    continue
+
+                record = st.session_state["fogli_generati"][foglio_key]
+
+                if record.get("lucchetto_mese", False) or record.get("lucchetto_foglio", False):
+                    continue
+
+                step525_zero_selected_days_on_record(record, selected_days)
+                st.session_state["sheet_warnings"][foglio_key] = []
+
+            st.success("Azzeramento massivo completato correttamente.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# =========================
 # APP
 # =========================
 
