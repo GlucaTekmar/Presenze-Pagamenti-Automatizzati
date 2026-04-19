@@ -935,7 +935,6 @@ def ensure_session_state():
         if key not in st.session_state:
             st.session_state[key] = value
 
-
 # =========================
 # PAGINE
 # =========================
@@ -1027,11 +1026,19 @@ def render_generation_page():
 
     filtro_nome = st.text_input("Filtro semplice nome/cognome", placeholder="Scrivi nome o cognome")
 
-    generation_table = st.session_state["generation_table"].copy()
-    if generation_table.empty:
+    full_table = st.session_state["generation_table"].copy()
+    if full_table.empty:
         st.warning("Nessuna riga disponibile per la generazione dei fogli.")
         st.markdown("</div>", unsafe_allow_html=True)
         return
+
+    generation_table = full_table.copy()
+
+    def is_generated(row_id: str) -> bool:
+        key = format_sheet_key(normalize_text(row_id), anno, mese)
+        return key in st.session_state["fogli_generati"]
+
+    generation_table["GENERATO"] = generation_table["ROW_ID"].apply(lambda rid: "🟢" if is_generated(rid) else "")
 
     if filtro_nome.strip():
         mask = generation_table["NOME"].str.upper().str.contains(filtro_nome.strip().upper(), na=False)
@@ -1043,6 +1050,54 @@ def render_generation_page():
         return
 
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+
+    st.markdown(
+        """
+        <div class="soft-note">
+            <b>Selezione multipla assistita</b><br>
+            Seleziona una riga di partenza e usa il tasto dedicato per selezionare fino a 50 righe consecutive.
+            Il pallino verde indica i fogli già generati per mese/anno selezionati.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    start_idx_option = st.selectbox(
+        "Riga di partenza per selezione multipla (max 50 righe)",
+        options=list(generation_table.index),
+        format_func=lambda i: (
+            f"{generation_table.loc[i, 'NOME']} | "
+            f"{generation_table.loc[i, 'SOCIETA']} | "
+            f"{generation_table.loc[i, 'PDV']} | "
+            f"{generation_table.loc[i, 'ATTIVITA_RIGA']}"
+        ),
+        key="step3_start_idx_select",
+    )
+
+    col_sel1, col_sel2 = st.columns(2)
+
+    with col_sel1:
+        if st.button("Seleziona 50 righe da qui in giù", use_container_width=True, key="step3_select_50"):
+            visible_row_ids = generation_table.loc[start_idx_option:, "ROW_ID"].tolist()[:50]
+            base_table = st.session_state["generation_table"].copy()
+            base_table.loc[base_table["ROW_ID"].isin(visible_row_ids), "SELEZIONA"] = True
+            st.session_state["generation_table"] = base_table
+            st.rerun()
+
+    with col_sel2:
+        if st.button("Deseleziona tutte le righe visibili", use_container_width=True, key="step3_deselect_visible"):
+            visible_row_ids = generation_table["ROW_ID"].tolist()
+            base_table = st.session_state["generation_table"].copy()
+            base_table.loc[base_table["ROW_ID"].isin(visible_row_ids), "SELEZIONA"] = False
+            st.session_state["generation_table"] = base_table
+            st.rerun()
+
+    generation_table = st.session_state["generation_table"].merge(
+        generation_table[["ROW_ID", "GENERATO"]],
+        on="ROW_ID",
+        how="inner",
+    )
+
     edited = st.data_editor(
         generation_table,
         hide_index=True,
@@ -1050,6 +1105,7 @@ def render_generation_page():
         num_rows="fixed",
         column_config={
             "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
+            "GENERATO": st.column_config.TextColumn("Creato", disabled=True),
             "ROW_ID": None,
             "MASTER_INDEX": None,
             "ORIGINE_MASTER": st.column_config.TextColumn("Master origine", disabled=True),
@@ -1068,12 +1124,24 @@ def render_generation_page():
         },
         key="editor_generation_table",
     )
+
+    updated_base_table = st.session_state["generation_table"].copy()
+    for _, row in edited[["ROW_ID", "SELEZIONA"]].iterrows():
+        updated_base_table.loc[updated_base_table["ROW_ID"] == row["ROW_ID"], "SELEZIONA"] = bool(row["SELEZIONA"])
+    st.session_state["generation_table"] = updated_base_table
+
     st.markdown("</div>", unsafe_allow_html=True)
 
     if st.button("Genera fogli presenze selezionati", type="primary", use_container_width=True):
-        selected = edited[edited["SELEZIONA"] == True].copy()
+        selected = st.session_state["generation_table"][st.session_state["generation_table"]["SELEZIONA"] == True].copy()
+
         if selected.empty:
             st.warning("Seleziona almeno una riga.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
+
+        if len(selected) > 50:
+            st.error("Puoi generare al massimo 50 fogli presenza per volta.")
             st.markdown("</div>", unsafe_allow_html=True)
             return
 
@@ -1089,7 +1157,12 @@ def render_generation_page():
             st.session_state["foglio_attivo"] = key
             st.session_state["sheet_warnings"][key] = []
 
+        updated_base_table = st.session_state["generation_table"].copy()
+        updated_base_table.loc[updated_base_table["ROW_ID"].isin(selected["ROW_ID"].tolist()), "SELEZIONA"] = False
+        st.session_state["generation_table"] = updated_base_table
+
         st.success("Fogli presenze generati correttamente.")
+        st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1356,7 +1429,7 @@ def render_sheet_page():
                 origine_master=normalize_upper(record["origine_master"]),
             )
 
-            old_visible = display_df[visible_cols].copy().reset_index(drop=True)
+            old_display = display_df[visible_cols].copy().reset_index(drop=True)
             new_display = merged.copy().reset_index(drop=True)
             new_display.insert(6, "SEP_1", "│")
             new_visible = new_display[visible_cols].copy().reset_index(drop=True)
@@ -1365,7 +1438,7 @@ def render_sheet_page():
             st.session_state["sheet_warnings"][selected_key] = warnings
             update_sheet_totals(record)
 
-            if not new_visible.equals(old_visible):
+            if not new_visible.equals(old_display):
                 st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
