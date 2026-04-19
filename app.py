@@ -2142,13 +2142,12 @@ def render_generation_page():
 
 # =========================
 # STEP 5 - CHIUSURA LOGICHE / FUNZIONI STEP 4
-# SOSTITUTIVO COMPLETO
+# VERSIONE DEFINITIVA
 # DA INCOLLARE AL POSTO DELLO STEP 5 ATTUALE
 # =========================
 
 calculate_sheet_stats_step3 = calculate_sheet_stats
 update_sheet_totals_step3 = update_sheet_totals
-clear_entire_sheet_step3 = clear_entire_sheet
 update_data_view_step3 = update_data_view
 
 
@@ -2180,31 +2179,6 @@ def step5_current_amount_for_row(df: pd.DataFrame, idx: int, origine_master: str
     for _, euro_col, _, _ in step5_allowed_activity_columns(origine_master):
         totale += safe_float(df.at[idx, euro_col])
     return round(totale, 2)
-
-
-def step5_drop_widget_state(selected_key: str):
-    keys_to_drop = [
-        f"step5_societa_{selected_key}",
-        f"step5_nome_{selected_key}",
-        f"step5_cf_{selected_key}",
-        f"step5_pdv_{selected_key}",
-        f"step5_tipo_contratto_{selected_key}",
-        f"step5_scadenza_{selected_key}",
-        f"step5_netto_ora_{selected_key}",
-        f"step5_lock_foglio_{selected_key}",
-        f"step5_lock_mese_{selected_key}",
-        f"step5_arretrati_{selected_key}",
-        f"step5_extra_{selected_key}",
-        f"step5_affiancamenti_{selected_key}",
-        f"step5_domeniche_{selected_key}",
-        f"step5_rimborso_{selected_key}",
-        f"step5_rimborso_upload_{selected_key}",
-        f"step5_note_generali_{selected_key}",
-        f"step5_editor_tabella_{selected_key}",
-    ]
-    for key in keys_to_drop:
-        if key in st.session_state:
-            del st.session_state[key]
 
 
 def get_row_status(df: pd.DataFrame, idx: int) -> str:
@@ -2426,22 +2400,6 @@ def update_sheet_totals(record: dict):
 def clear_entire_sheet(record: dict):
     df = record["tabella"].copy()
 
-    corpo_euro_azzerato = round(
-        df["EDICOLA_€"].apply(safe_float).sum()
-        + df["MONDADORI_€"].apply(safe_float).sum()
-        + df["GIUNTI_€"].apply(safe_float).sum(),
-        2,
-    )
-
-    fondo_euro_azzerato = round(
-        safe_float(record["arretrati"])
-        + safe_float(record["extra"])
-        + safe_float(record["affiancamenti"])
-        + safe_float(record["domeniche"])
-        + safe_float(record["rimborso"]),
-        2,
-    )
-
     df["EDICOLA_ORE"] = 0.0
     df["EDICOLA_€"] = 0.0
     df["EDICOLA_TIPO_ASSENZA"] = ""
@@ -2456,17 +2414,7 @@ def clear_entire_sheet(record: dict):
 
     record["tabella"] = df
 
-    record["arretrati"] = 0.0
-    record["extra"] = 0.0
-    record["affiancamenti"] = 0.0
-    record["domeniche"] = 0.0
-    record["rimborso"] = 0.0
-    record["rimborso_allegati"] = []
-    record["note_generali"] = ""
-
     update_sheet_totals(record)
-
-    record["tot_euro_da_scalare"] = round(corpo_euro_azzerato + fondo_euro_azzerato, 2)
 
 
 def render_sheet_page():
@@ -2865,11 +2813,9 @@ def render_sheet_page():
     col_reset1, col_reset2 = st.columns([1, 1])
 
     with col_reset1:
-        if st.button("Azzera foglio presenza", disabled=locked, use_container_width=True, key=f"step5_azzera_{selected_key}"):
+        if st.button("Azzera ore foglio", disabled=locked, use_container_width=True, key=f"step5_azzera_{selected_key}"):
             clear_entire_sheet(record)
             st.session_state["sheet_warnings"][selected_key] = []
-
-            step5_drop_widget_state(selected_key)
             st.rerun()
 
     with col_reset2:
