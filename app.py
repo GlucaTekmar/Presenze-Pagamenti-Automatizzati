@@ -2847,7 +2847,8 @@ def render_sheet_page():
 
 # =========================
 # STEP 5,25 - AZZERAMENTO MASSIVO
-# DA INCOLLARE SUBITO SOTTO LO STEP 5
+# VERSIONE CORRETTA
+# DA INCOLLARE AL POSTO DELLO STEP 5,25 ATTUALE
 # =========================
 
 render_generation_page_step45 = render_generation_page
@@ -2894,22 +2895,34 @@ def step525_days_text(selected_days: list[int]) -> str:
     return f"Giorni da {min(selected_days)} a {max(selected_days)}"
 
 
+def step525_resolve_tipo_attivita(record: dict) -> str:
+    origine_master = normalize_upper(record.get("origine_master", ""))
+    attivita_riga = normalize_upper(record.get("attivita_riga", ""))
+
+    if "EDICOLA" in origine_master or "EDICOLA" in attivita_riga:
+        return ORIGINE_EDICOLA
+    if "LIBRI" in origine_master or "LIBRI" in attivita_riga:
+        return ORIGINE_LIBRI
+
+    return origine_master or attivita_riga
+
+
 def step525_build_massive_table(anno: int, mese: int, societa: str, attivita: str) -> pd.DataFrame:
     righe = []
     societa_up = normalize_upper(societa)
     attivita_up = normalize_upper(attivita)
 
-    for key, record in st.session_state["fogli_generati"].items():
+    for key, record in st.session_state.get("fogli_generati", {}).items():
         if int(record.get("anno", 0)) != int(anno):
             continue
         if int(record.get("mese", 0)) != int(mese):
             continue
         if normalize_upper(record.get("societa", "")) != societa_up:
             continue
-        if normalize_upper(record.get("origine_master", "")) != attivita_up:
-            continue
 
-        tipo_attivita = "EDICOLA" if attivita_up == ORIGINE_EDICOLA else "LIBRI"
+        tipo_attivita_record = step525_resolve_tipo_attivita(record)
+        if normalize_upper(tipo_attivita_record) != attivita_up:
+            continue
 
         righe.append(
             {
@@ -2918,16 +2931,19 @@ def step525_build_massive_table(anno: int, mese: int, societa: str, attivita: st
                 "NOMINATIVO_DIPENDENTE": normalize_text(record.get("nome", "")),
                 "PDV": normalize_text(record.get("pdv", "")),
                 "SOCIETA": normalize_text(record.get("societa", "")),
-                "TIPO_ATTIVITA": tipo_attivita,
+                "TIPO_ATTIVITA": normalize_text(tipo_attivita_record),
             }
         )
+
+    if not righe:
+        return pd.DataFrame(columns=["SELEZIONA", "FOGLIO_KEY", "NOMINATIVO_DIPENDENTE", "PDV", "SOCIETA", "TIPO_ATTIVITA"])
 
     return pd.DataFrame(righe)
 
 
 def step525_zero_selected_days_on_record(record: dict, selected_days: list[int]):
     df = record["tabella"].copy()
-    origine_master = normalize_upper(record["origine_master"])
+    origine_master = step525_resolve_tipo_attivita(record)
 
     for idx in df.index:
         giorno_num = int(df.at[idx, "GIORNO_NUM"])
@@ -3037,8 +3053,8 @@ def render_generation_page():
     if filtro_nome.strip() and not massive_table.empty:
         filtro_up = filtro_nome.strip().upper()
         mask = (
-            massive_table["NOMINATIVO_DIPENDENTE"].str.upper().str.contains(filtro_up, na=False)
-            | massive_table["PDV"].str.upper().str.contains(filtro_up, na=False)
+            massive_table["NOMINATIVO_DIPENDENTE"].astype(str).str.upper().str.contains(filtro_up, na=False)
+            | massive_table["PDV"].astype(str).str.upper().str.contains(filtro_up, na=False)
         )
         massive_table = massive_table[mask].copy()
 
@@ -3091,6 +3107,8 @@ def render_generation_page():
                 st.markdown("</div>", unsafe_allow_html=True)
                 return
 
+            modificati = 0
+
             for _, row in selected_rows.iterrows():
                 foglio_key = row["FOGLIO_KEY"]
                 if foglio_key not in st.session_state["fogli_generati"]:
@@ -3103,8 +3121,9 @@ def render_generation_page():
 
                 step525_zero_selected_days_on_record(record, selected_days)
                 st.session_state["sheet_warnings"][foglio_key] = []
+                modificati += 1
 
-            st.success("Azzeramento massivo completato correttamente.")
+            st.success(f"Azzeramento massivo completato correttamente. Fogli modificati: {modificati}")
 
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
