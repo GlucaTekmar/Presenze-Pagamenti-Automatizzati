@@ -1167,6 +1167,7 @@ def render_sheet_page():
             use_container_width=True,
             num_rows="fixed",
             disabled=locked,
+            height=1100,
             column_config={
                 "GIORNO_NUM": st.column_config.NumberColumn("Giorno", disabled=True),
                 "DATA_VIEW": st.column_config.TextColumn("Data", disabled=True),
@@ -1264,6 +1265,7 @@ def render_sheet_page():
             use_container_width=True,
             num_rows="fixed",
             disabled=locked,
+            height=1100,
             column_config={
                 "GIORNO_NUM": st.column_config.NumberColumn("Giorno", disabled=True),
                 "DATA_VIEW": st.column_config.TextColumn("Data", disabled=True),
@@ -2552,6 +2554,7 @@ def render_sheet_page():
             use_container_width=True,
             num_rows="fixed",
             disabled=locked,
+            height=1100,
             column_config={
                 "GIORNO_NUM": st.column_config.NumberColumn("Giorno", disabled=True),
                 "DATA_VIEW": st.column_config.TextColumn("Data", disabled=True),
@@ -2649,6 +2652,7 @@ def render_sheet_page():
             use_container_width=True,
             num_rows="fixed",
             disabled=locked,
+            height=1100,
             column_config={
                 "GIORNO_NUM": st.column_config.NumberColumn("Giorno", disabled=True),
                 "DATA_VIEW": st.column_config.TextColumn("Data", disabled=True),
