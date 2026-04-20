@@ -935,6 +935,7 @@ def ensure_session_state():
         if key not in st.session_state:
             st.session_state[key] = value
 
+
 # =========================
 # PAGINE
 # =========================
@@ -991,6 +992,7 @@ def render_master_page():
         )
         st.session_state["master_loaded"] = True
         st.success("Master verificati e caricati correttamente.")
+        st.rerun()
 
     if st.session_state["master_loaded"]:
         with st.expander("Visualizza intestazioni reali e anteprima master"):
@@ -1024,7 +1026,7 @@ def render_generation_page():
     with col2:
         mese = st.selectbox("Mese", list(MESI.keys()), format_func=lambda x: MESI[x], index=0, key="mese_step3")
 
-    filtro_nome = st.text_input("Filtro semplice nome/cognome", placeholder="Scrivi nome o cognome")
+    filtro_nome = st.text_input("Filtro semplice nome/cognome", placeholder="Scrivi nome o cognome", key="step3_filtro_nome")
 
     full_table = st.session_state["generation_table"].copy()
     if full_table.empty:
@@ -1041,7 +1043,7 @@ def render_generation_page():
     generation_table["GENERATO"] = generation_table["ROW_ID"].apply(lambda rid: "🟢" if is_generated(rid) else "")
 
     if filtro_nome.strip():
-        mask = generation_table["NOME"].str.upper().str.contains(filtro_nome.strip().upper(), na=False)
+        mask = generation_table["NOME"].astype(str).str.upper().str.contains(filtro_nome.strip().upper(), na=False)
         generation_table = generation_table[mask].copy()
 
     if generation_table.empty:
@@ -1050,19 +1052,20 @@ def render_generation_page():
         return
 
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
-
     st.markdown(
         """
         <div class="soft-note">
             <b>Selezione multipla assistita</b><br>
-            Seleziona una riga di partenza e usa il tasto dedicato per selezionare fino a 50 righe consecutive.
+            Scegli una riga di partenza e usa il tasto dedicato per selezionare fino a 50 righe consecutive.<br>
             Il pallino verde indica i fogli già generati per mese/anno selezionati.
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    start_idx_option = st.selectbox(
+    generation_table = generation_table.reset_index(drop=True)
+
+    start_row_idx = st.selectbox(
         "Riga di partenza per selezione multipla (max 50 righe)",
         options=list(generation_table.index),
         format_func=lambda i: (
@@ -1071,16 +1074,16 @@ def render_generation_page():
             f"{generation_table.loc[i, 'PDV']} | "
             f"{generation_table.loc[i, 'ATTIVITA_RIGA']}"
         ),
-        key="step3_start_idx_select",
+        key="step3_start_row_idx",
     )
 
     col_sel1, col_sel2 = st.columns(2)
 
     with col_sel1:
         if st.button("Seleziona 50 righe da qui in giù", use_container_width=True, key="step3_select_50"):
-            visible_row_ids = generation_table.loc[start_idx_option:, "ROW_ID"].tolist()[:50]
+            row_ids_to_select = generation_table.loc[start_row_idx:, "ROW_ID"].tolist()[:50]
             base_table = st.session_state["generation_table"].copy()
-            base_table.loc[base_table["ROW_ID"].isin(visible_row_ids), "SELEZIONA"] = True
+            base_table.loc[base_table["ROW_ID"].isin(row_ids_to_select), "SELEZIONA"] = True
             st.session_state["generation_table"] = base_table
             st.rerun()
 
@@ -1092,14 +1095,15 @@ def render_generation_page():
             st.session_state["generation_table"] = base_table
             st.rerun()
 
-    generation_table = st.session_state["generation_table"].merge(
-        generation_table[["ROW_ID", "GENERATO"]],
-        on="ROW_ID",
-        how="inner",
-    )
+    editor_table = st.session_state["generation_table"].copy()
+    if filtro_nome.strip():
+        mask_editor = editor_table["NOME"].astype(str).str.upper().str.contains(filtro_nome.strip().upper(), na=False)
+        editor_table = editor_table[mask_editor].copy()
+
+    editor_table["GENERATO"] = editor_table["ROW_ID"].apply(lambda rid: "🟢" if is_generated(rid) else "")
 
     edited = st.data_editor(
-        generation_table,
+        editor_table.reset_index(drop=True),
         hide_index=True,
         use_container_width=True,
         num_rows="fixed",
@@ -1132,7 +1136,7 @@ def render_generation_page():
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    if st.button("Genera fogli presenze selezionati", type="primary", use_container_width=True):
+    if st.button("Genera fogli presenze selezionati", type="primary", use_container_width=True, key="step3_genera_fogli"):
         selected = st.session_state["generation_table"][st.session_state["generation_table"]["SELEZIONA"] == True].copy()
 
         if selected.empty:
@@ -1145,6 +1149,7 @@ def render_generation_page():
             st.markdown("</div>", unsafe_allow_html=True)
             return
 
+        last_key = None
         for _, row in selected.iterrows():
             key = format_sheet_key(normalize_text(row["ROW_ID"]), anno, mese)
             st.session_state["fogli_generati"][key] = init_sheet_record(
@@ -1154,8 +1159,11 @@ def render_generation_page():
                 anno=anno,
                 mese=mese,
             )
-            st.session_state["foglio_attivo"] = key
             st.session_state["sheet_warnings"][key] = []
+            last_key = key
+
+        if last_key:
+            st.session_state["foglio_attivo"] = last_key
 
         updated_base_table = st.session_state["generation_table"].copy()
         updated_base_table.loc[updated_base_table["ROW_ID"].isin(selected["ROW_ID"].tolist()), "SELEZIONA"] = False
@@ -1191,6 +1199,7 @@ def render_sheet_page():
             f"{st.session_state['fogli_generati'][k]['attivita_riga']} | "
             f"{MESI[st.session_state['fogli_generati'][k]['mese']]} {st.session_state['fogli_generati'][k]['anno']}"
         ),
+        key="step3_select_foglio_attivo",
     )
     st.session_state["foglio_attivo"] = selected_key
     record = st.session_state["fogli_generati"][selected_key]
@@ -1201,29 +1210,29 @@ def render_sheet_page():
 
     col_h1, col_h2, col_h3, col_h4 = st.columns(4)
     with col_h1:
-        st.text_input("Società", value=record["societa"], disabled=True)
-        st.text_input("Attività", value=record["attivita_riga"], disabled=True)
-        st.text_input("Nome", value=record["nome"], disabled=True)
+        st.text_input("Società", value=record["societa"], disabled=True, key=f"step3_societa_{selected_key}")
+        st.text_input("Attività", value=record["attivita_riga"], disabled=True, key=f"step3_attivita_{selected_key}")
+        st.text_input("Nome", value=record["nome"], disabled=True, key=f"step3_nome_{selected_key}")
     with col_h2:
-        st.text_input("CF", value=record["cf"], disabled=True)
-        st.text_input("PDV", value=record["pdv"], disabled=True)
-        st.text_input("Mese", value=f"{MESI[record['mese']]} {record['anno']}", disabled=True)
+        st.text_input("CF", value=record["cf"], disabled=True, key=f"step3_cf_{selected_key}")
+        st.text_input("PDV", value=record["pdv"], disabled=True, key=f"step3_pdv_{selected_key}")
+        st.text_input("Mese", value=f"{MESI[record['mese']]} {record['anno']}", disabled=True, key=f"step3_mese_{selected_key}")
     with col_h3:
-        record["tipo_contratto"] = st.text_input("Tipo contratto", value=record["tipo_contratto"], disabled=locked)
-        record["scadenza_contratto"] = st.text_input("Scadenza contratto", value=record["scadenza_contratto"], disabled=locked)
-        record["netto_mese"] = st.number_input("NETTO MESE", value=float(record["netto_mese"]), step=0.50, disabled=locked)
+        record["tipo_contratto"] = st.text_input("Tipo contratto", value=record["tipo_contratto"], disabled=locked, key=f"step3_tipo_contratto_{selected_key}")
+        record["scadenza_contratto"] = st.text_input("Scadenza contratto", value=record["scadenza_contratto"], disabled=locked, key=f"step3_scadenza_{selected_key}")
+        record["netto_mese"] = st.number_input("NETTO MESE", value=float(record["netto_mese"]), step=0.50, disabled=locked, key=f"step3_netto_mese_{selected_key}")
     with col_h4:
-        record["netto_ora"] = st.number_input("Netto orario", value=float(record["netto_ora"]), step=0.10, disabled=locked)
-        st.number_input("Giorni lavorati", value=int(record["giorni_lavorati"]), disabled=True)
-        st.number_input("Giorni modificati", value=int(record["giorni_modificati"]), disabled=True)
+        record["netto_ora"] = st.number_input("Netto orario", value=float(record["netto_ora"]), step=0.10, disabled=locked, key=f"step3_netto_ora_{selected_key}")
+        st.number_input("Giorni lavorati", value=int(record["giorni_lavorati"]), disabled=True, key=f"step3_giorni_lavorati_{selected_key}")
+        st.number_input("Giorni modificati", value=int(record["giorni_modificati"]), disabled=True, key=f"step3_giorni_modificati_{selected_key}")
 
     col_h5, col_h6, col_h7 = st.columns(3)
     with col_h5:
-        st.number_input("Tot ore lavorative mese", value=float(record["tot_ore_lavorative_mese"]), disabled=True)
+        st.number_input("Tot ore lavorative mese", value=float(record["tot_ore_lavorative_mese"]), disabled=True, key=f"step3_tot_ore_{selected_key}")
     with col_h6:
-        st.number_input("Tot ore azzerate", value=float(record["tot_ore_azzerate"]), disabled=True)
+        st.number_input("Tot ore azzerate", value=float(record["tot_ore_azzerate"]), disabled=True, key=f"step3_tot_ore_azz_{selected_key}")
     with col_h7:
-        st.number_input("Tot € da scalare", value=float(record["tot_euro_da_scalare"]), disabled=True)
+        st.number_input("Tot € da scalare", value=float(record["tot_euro_da_scalare"]), disabled=True, key=f"step3_tot_scalare_{selected_key}")
 
     col_lock1, col_lock2 = st.columns(2)
     with col_lock1:
@@ -1231,9 +1240,10 @@ def render_sheet_page():
             "Lucchetto foglio",
             value=record["lucchetto_foglio"],
             disabled=record["lucchetto_mese"],
+            key=f"step3_lock_foglio_{selected_key}",
         )
     with col_lock2:
-        record["lucchetto_mese"] = st.checkbox("Lucchetto mese", value=record["lucchetto_mese"])
+        record["lucchetto_mese"] = st.checkbox("Lucchetto mese", value=record["lucchetto_mese"], key=f"step3_lock_mese_{selected_key}")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1448,15 +1458,15 @@ def render_sheet_page():
 
     col_b1, col_b2, col_b3, col_b4, col_b5 = st.columns(5)
     with col_b1:
-        record["arretrati"] = st.number_input("€ arretrato", value=float(record["arretrati"]), step=0.50, disabled=locked)
+        record["arretrati"] = st.number_input("€ arretrato", value=float(record["arretrati"]), step=0.50, disabled=locked, key=f"step3_arretrati_{selected_key}")
     with col_b2:
-        record["extra"] = st.number_input("€ extra", value=float(record["extra"]), step=0.50, disabled=locked)
+        record["extra"] = st.number_input("€ extra", value=float(record["extra"]), step=0.50, disabled=locked, key=f"step3_extra_{selected_key}")
     with col_b3:
-        record["affiancamenti"] = st.number_input("€ affiancamento", value=float(record["affiancamenti"]), step=0.50, disabled=locked)
+        record["affiancamenti"] = st.number_input("€ affiancamento", value=float(record["affiancamenti"]), step=0.50, disabled=locked, key=f"step3_affiancamenti_{selected_key}")
     with col_b4:
-        record["domeniche"] = st.number_input("€ domeniche", value=float(record["domeniche"]), step=0.50, disabled=locked)
+        record["domeniche"] = st.number_input("€ domeniche", value=float(record["domeniche"]), step=0.50, disabled=locked, key=f"step3_domeniche_{selected_key}")
     with col_b5:
-        record["rimborso"] = st.number_input("€ rimborso", value=float(record["rimborso"]), step=0.50, disabled=locked)
+        record["rimborso"] = st.number_input("€ rimborso", value=float(record["rimborso"]), step=0.50, disabled=locked, key=f"step3_rimborso_{selected_key}")
 
     uploaded_docs = st.file_uploader(
         "Allegati rimborso",
@@ -1475,6 +1485,7 @@ def render_sheet_page():
         value=record["note_generali"],
         height=130,
         disabled=locked,
+        key=f"step3_note_generali_{selected_key}",
     )
 
     update_sheet_totals(record)
@@ -1501,7 +1512,7 @@ def render_sheet_page():
 
     col_reset1, col_reset2 = st.columns([1, 1])
     with col_reset1:
-        if st.button("Azzera foglio presenza", disabled=locked, use_container_width=True):
+        if st.button("Azzera foglio presenza", disabled=locked, use_container_width=True, key=f"step3_azzera_{selected_key}"):
             clear_entire_sheet(record)
             st.session_state["sheet_warnings"][selected_key] = []
             st.rerun()
