@@ -1529,7 +1529,7 @@ def render_sheet_page():
 
 inject_global_css_step3 = inject_global_css
 render_sheet_page_step3 = render_sheet_page
-
+render_generation_page_step3 = render_generation_page
 
 def inject_global_css():
     inject_global_css_step3()
