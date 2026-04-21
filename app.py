@@ -1996,88 +1996,21 @@ def step4_create_record(modalita: str, societa: str, attivita: str, anno: int, m
         "step4_selected_days": list(selected_days),
     }
 
-
 def render_generation_page():
     step4_ensure_session_state()
 
-    render_page_title("2. Generazione fogli presenze")
-    st.markdown('<div class="section-box">', unsafe_allow_html=True)
+    # Base reale pagina 2 STEP 3:
+    # mantiene selezione massiva, eventuale stato righe generate,
+    # tabella principale e logica coerente del mese.
+    render_generation_page_step3()
 
     if not st.session_state["master_loaded"]:
-        st.warning("Prima carica e verifica i master nella sezione 'Caricamento master'.")
-        st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        anno = st.selectbox("Anno", [2025, 2026, 2027], index=1, key="anno_step3")
-    with col2:
-        mese = st.selectbox("Mese", list(MESI.keys()), format_func=lambda x: MESI[x], index=0, key="mese_step3")
+    anno = int(st.session_state.get("anno_step3", date.today().year))
+    mese = int(st.session_state.get("mese_step3", date.today().month))
 
-    generation_table = st.session_state["generation_table"].copy()
-    filtro_nome = st.text_input("Filtro semplice nome/cognome", placeholder="Scrivi nome o cognome", key="step3_filtro_nome")
-
-    if generation_table.empty:
-        st.warning("Nessuna riga disponibile per la generazione dei fogli.")
-        st.markdown("</div>", unsafe_allow_html=True)
-        return
-
-    if filtro_nome.strip():
-        mask = generation_table["NOME"].str.upper().str.contains(filtro_nome.strip().upper(), na=False)
-        generation_table = generation_table[mask].copy()
-
-    st.markdown('<div class="step4-master-box">', unsafe_allow_html=True)
-    st.markdown('<div class="table-title">Generazione fogli da master</div>', unsafe_allow_html=True)
-
-    if generation_table.empty:
-        st.info("Nessun risultato trovato con il filtro inserito.")
-    else:
-        edited = st.data_editor(
-            generation_table,
-            hide_index=True,
-            use_container_width=True,
-            num_rows="fixed",
-            column_config={
-                "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
-                "ROW_ID": None,
-                "MASTER_INDEX": None,
-                "ORIGINE_MASTER": st.column_config.TextColumn("Master origine", disabled=True),
-                "TIPO_LIBRI": st.column_config.TextColumn("Tipo libri", disabled=True),
-                "NOME": st.column_config.TextColumn("Nome", disabled=True),
-                "COD_FISCALE": st.column_config.TextColumn("CF", disabled=True),
-                "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
-                "PDV": st.column_config.TextColumn("PDV", disabled=True),
-                "TELEFONO": st.column_config.TextColumn("Telefono", disabled=True),
-                "EMAIL": st.column_config.TextColumn("Email", disabled=True),
-                "NETTO_ORA": st.column_config.NumberColumn("Netto orario", format="%.2f €", disabled=True),
-                "NETTO_MESE": st.column_config.NumberColumn("Netto mese", format="%.2f €", disabled=True),
-                "TIPO_CONTRATTO": st.column_config.TextColumn("Tipo contratto", disabled=True),
-                "SCADENZA_CONTRATTO": st.column_config.TextColumn("Scadenza contratto", disabled=True),
-                "ATTIVITA_RIGA": st.column_config.TextColumn("Attività", disabled=True),
-            },
-            key="editor_generation_table",
-        )
-
-        if st.button("Genera fogli presenze selezionati", type="primary", use_container_width=True, key="btn_step3_generate"):
-            selected = edited[edited["SELEZIONA"] == True].copy()
-            if selected.empty:
-                st.warning("Seleziona almeno una riga.")
-            else:
-                for _, row in selected.iterrows():
-                    key = format_sheet_key(normalize_text(row["ROW_ID"]), anno, mese)
-                    st.session_state["fogli_generati"][key] = init_sheet_record(
-                        row=row,
-                        df_edicola=st.session_state["df_edicola"],
-                        df_libri=st.session_state["df_libri"],
-                        anno=anno,
-                        mese=mese,
-                    )
-                    st.session_state["foglio_attivo"] = key
-                    st.session_state["sheet_warnings"][key] = []
-                st.success("Fogli presenze generati correttamente.")
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
     st.markdown('<div class="step4-action-box">', unsafe_allow_html=True)
     st.markdown('<div class="step4-action-title">NUOVO FOGLIO PRESENZA / SOSTITUZIONE</div>', unsafe_allow_html=True)
     st.markdown(
@@ -2101,7 +2034,11 @@ def render_generation_page():
     with col_s3:
         step4_attivita = st.selectbox("Attività", [ORIGINE_EDICOLA, ORIGINE_LIBRI], key="step4_attivita")
     with col_s4:
-        step4_tipo_giorno = st.selectbox("Giorno singolo oppure periodo", ["Giorno singolo", "Periodo"], key="step4_tipo_giorno")
+        step4_tipo_giorno = st.selectbox(
+            "Giorno singolo oppure periodo",
+            ["Giorno singolo", "Periodo"],
+            key="step4_tipo_giorno",
+        )
 
     giorni_mese = calendar.monthrange(anno, mese)[1]
     primo_giorno = date(anno, mese, 1)
@@ -2142,25 +2079,37 @@ def render_generation_page():
         dipendenti_table = step4_build_dipendenti_table(step4_societa, step4_attivita, step4_modalita)
         pdv_table = step4_build_pdv_table(step4_societa, step4_attivita)
 
-        st.markdown('<div class="step4-legend-box">', unsafe_allow_html=True)
-        st.markdown('<div class="step4-help"><b>Selezione guidata:</b> puoi selezionare una sola riga per tabella. Se ne selezioni solo una, il foglio si genera comunque e gli altri campi restano manuali.</div>', unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        filtro_dip = st.text_input("Filtro tabella dipendenti", placeholder="Nome / cognome", key="step4_filtro_dip")
-        filtro_pdv = st.text_input("Filtro tabella punto vendita", placeholder="Città / pdv", key="step4_filtro_pdv")
+        filtro_dip = st.text_input(
+            "Filtro tabella dipendenti",
+            placeholder="Nome / cognome",
+            key="step4_filtro_dip",
+        )
+        filtro_pdv = st.text_input(
+            "Filtro tabella punto vendita",
+            placeholder="Città / pdv",
+            key="step4_filtro_pdv",
+        )
 
         if filtro_dip.strip() and not dipendenti_table.empty:
-            mask_dip = dipendenti_table["NOMINATIVO"].str.upper().str.contains(filtro_dip.strip().upper(), na=False)
+            mask_dip = dipendenti_table["NOMINATIVO"].astype(str).str.upper().str.contains(filtro_dip.strip().upper(), na=False)
             dipendenti_table = dipendenti_table[mask_dip].copy()
 
         if filtro_pdv.strip() and not pdv_table.empty:
-            mask_pdv = pdv_table["PUNTO_VENDITA"].str.upper().str.contains(filtro_pdv.strip().upper(), na=False)
+            mask_pdv = (
+                pdv_table["PDV"].astype(str).str.upper().str.contains(filtro_pdv.strip().upper(), na=False)
+                | pdv_table["CITTA"].astype(str).str.upper().str.contains(filtro_pdv.strip().upper(), na=False)
+            )
             pdv_table = pdv_table[mask_pdv].copy()
 
-        st.markdown('<div class="separator-help"><b>Tabella dipendenti</b></div>', unsafe_allow_html=True)
+        st.markdown('<div class="step4-legend-box">', unsafe_allow_html=True)
+        st.markdown("<b>Tabella dipendenti</b>", unsafe_allow_html=True)
+
         if dipendenti_table.empty:
-            st.info("Nessun dato disponibile nella tabella dipendenti.")
+            st.info("Nessun dipendente coerente trovato.")
         else:
+            dipendenti_table = dipendenti_table.reset_index(drop=True)
+            dipendenti_table.insert(0, "SELEZIONA", False)
+
             dipendenti_table = st.data_editor(
                 dipendenti_table,
                 hide_index=True,
@@ -2169,21 +2118,25 @@ def render_generation_page():
                 column_config={
                     "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
                     "SOURCE_ID": None,
-                    "TEL": None,
-                    "MAIL": None,
                     "NOMINATIVO": st.column_config.TextColumn("Nominativo", disabled=True),
-                    "CODICE_FISCALE": st.column_config.TextColumn("Codice Fiscale", disabled=True),
+                    "CODICE_FISCALE": st.column_config.TextColumn("Codice fiscale", disabled=True),
                     "TIPO_CONTRATTO": st.column_config.TextColumn("Tipo contratto", disabled=True),
                     "SCADENZA_CONTRATTO": st.column_config.TextColumn("Scadenza contratto", disabled=True),
-                    "NETTO_ORA": st.column_config.NumberColumn("Netto/ora", format="%.2f €", disabled=True),
+                    "NETTO_ORA": st.column_config.NumberColumn("Netto orario", format="%.2f €", disabled=True),
+                    "TEL": st.column_config.TextColumn("Tel", disabled=True),
+                    "MAIL": st.column_config.TextColumn("Mail", disabled=True),
                 },
-                key="step4_table_dipendenti",
+                key="step4_table_dip",
             )
 
-        st.markdown('<div class="separator-help"><b>Tabella punto vendita</b></div>', unsafe_allow_html=True)
+        st.markdown("<br><b>Tabella punto vendita</b>", unsafe_allow_html=True)
+
         if pdv_table.empty:
-            st.info("Nessun dato disponibile nella tabella punto vendita.")
+            st.info("Nessun PDV coerente trovato.")
         else:
+            pdv_table = pdv_table.reset_index(drop=True)
+            pdv_table.insert(0, "SELEZIONA", False)
+
             pdv_table = st.data_editor(
                 pdv_table,
                 hide_index=True,
@@ -2192,41 +2145,30 @@ def render_generation_page():
                 column_config={
                     "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
                     "SOURCE_ID": None,
-                    "MON_LUN": None,
-                    "MON_MAR": None,
-                    "MON_MER": None,
-                    "MON_GIO": None,
-                    "MON_VEN": None,
-                    "MON_SAB": None,
-                    "MON_DOM": None,
-                    "GIU_LUN": None,
-                    "GIU_MAR": None,
-                    "GIU_MER": None,
-                    "GIU_GIO": None,
-                    "GIU_VEN": None,
-                    "GIU_SAB": None,
-                    "GIU_DOM": None,
-                    "PUNTO_VENDITA": st.column_config.TextColumn("Punto vendita", disabled=True),
+                    "PDV": st.column_config.TextColumn("PDV", disabled=True),
+                    "CITTA": st.column_config.TextColumn("Città", disabled=True),
                     "TIPO_ATTIVITA": st.column_config.TextColumn("Tipo attività", disabled=True),
-                    "LUNEDI": st.column_config.NumberColumn("Lunedì", format="%.2f", disabled=True),
-                    "MARTEDI": st.column_config.NumberColumn("Martedì", format="%.2f", disabled=True),
-                    "MERCOLEDI": st.column_config.NumberColumn("Mercoledì", format="%.2f", disabled=True),
-                    "GIOVEDI": st.column_config.NumberColumn("Giovedì", format="%.2f", disabled=True),
-                    "VENERDI": st.column_config.NumberColumn("Venerdì", format="%.2f", disabled=True),
-                    "SABATO": st.column_config.NumberColumn("Sabato", format="%.2f", disabled=True),
-                    "DOMENICA": st.column_config.NumberColumn("Domenica", format="%.2f", disabled=True),
+                    "LUN": st.column_config.NumberColumn("Lunedì", format="%.2f", disabled=True),
+                    "MAR": st.column_config.NumberColumn("Martedì", format="%.2f", disabled=True),
+                    "MER": st.column_config.NumberColumn("Mercoledì", format="%.2f", disabled=True),
+                    "GIO": st.column_config.NumberColumn("Giovedì", format="%.2f", disabled=True),
+                    "VEN": st.column_config.NumberColumn("Venerdì", format="%.2f", disabled=True),
+                    "SAB": st.column_config.NumberColumn("Sabato", format="%.2f", disabled=True),
+                    "DOM": st.column_config.NumberColumn("Domenica", format="%.2f", disabled=True),
                 },
                 key="step4_table_pdv",
             )
 
-    if st.button("NUOVO FOGLIO PRESENZA / SOSTITUZIONE", type="primary", use_container_width=True, key="btn_step4_generate"):
-        if not selected_days:
-            st.error("Giorno o periodo non valido per il mese selezionato.")
-            st.markdown("</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-            return
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        if normalize_upper(step4_modalita) == "FOGLIO PRESENZA VUOTO":
+    if normalize_upper(step4_modalita) == "FOGLIO PRESENZA VUOTO":
+        if st.button("NUOVO FOGLIO PRESENZA / SOSTITUZIONE", type="primary", use_container_width=True):
+            if not selected_days:
+                st.error("Giorno o periodo non valido per il mese selezionato.")
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+                return
+
             record = step4_create_record(step4_modalita, step4_societa, step4_attivita, anno, mese, selected_days)
             key = format_sheet_key(record["row_id"], anno, mese)
             st.session_state["fogli_generati"][key] = record
@@ -2234,9 +2176,21 @@ def render_generation_page():
             st.session_state["sheet_warnings"][key] = []
             st.session_state["step4_last_created_key"] = key
             st.success("Nuovo foglio presenza vuoto creato correttamente.")
-        else:
-            dip_row, dip_count = step4_get_single_selected_row(dipendenti_table if not dipendenti_table.empty else pd.DataFrame())
-            pdv_row, pdv_count = step4_get_single_selected_row(pdv_table if not pdv_table.empty else pd.DataFrame())
+            st.rerun()
+    else:
+        if st.button("NUOVO FOGLIO PRESENZA / SOSTITUZIONE", type="primary", use_container_width=True):
+            if not selected_days:
+                st.error("Giorno o periodo non valido per il mese selezionato.")
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+                return
+
+            dip_row, dip_count = step4_get_single_selected_row(
+                dipendenti_table if not dipendenti_table.empty else pd.DataFrame()
+            )
+            pdv_row, pdv_count = step4_get_single_selected_row(
+                pdv_table if not pdv_table.empty else pd.DataFrame()
+            )
 
             if dip_count > 1 or pdv_count > 1:
                 st.error("Selezionare una sola riga di origine dati per la compilazione del nuovo foglio presenza.")
@@ -2259,6 +2213,7 @@ def render_generation_page():
             st.session_state["sheet_warnings"][key] = []
             st.session_state["step4_last_created_key"] = key
             st.success("Nuovo foglio presenza / sostituzione creato correttamente.")
+            st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
