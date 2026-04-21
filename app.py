@@ -1999,9 +1999,7 @@ def step4_create_record(modalita: str, societa: str, attivita: str, anno: int, m
 def render_generation_page():
     step4_ensure_session_state()
 
-    # Base reale pagina 2 STEP 3:
-    # mantiene selezione massiva, eventuale stato righe generate,
-    # tabella principale e logica coerente del mese.
+    # usa la pagina 2 nuova già corretta nel blocco base
     render_generation_page_step3()
 
     if not st.session_state["master_loaded"]:
