@@ -3255,7 +3255,7 @@ def render_generation_page():
 # =========================
 
 def render_page_nuovi_fogli_placeholder():
-    render_page_title("4. Nuovi fogli / sostituzioni / azzeramenti")
+    render_page_title("4. Sostituzioni / Azzeramenti")
     st.markdown('<div class="section-box">', unsafe_allow_html=True)
 
     st.markdown(
@@ -3314,7 +3314,7 @@ def main():
                 "Origine dati",
                 "Generazione fogli",
                 "Fogli presenza",
-                "Nuovi fogli / sostituzioni / azzeramenti",
+                "Sostituzioni / Azzeramenti",
                 "Chiusura mese",
             ],
             key="main_navigation_radio",
@@ -3326,7 +3326,7 @@ def main():
         render_generation_page()
     elif sezione == "Fogli presenza":
         render_sheet_page()
-    elif sezione == "Nuovi fogli / sostituzioni / azzeramenti":
+    elif sezione == "Sostituzioni / Azzeramenti":
         render_page_nuovi_fogli_placeholder()
     elif sezione == "Chiusura mese":
         render_page_chiusura_mese_placeholder()
