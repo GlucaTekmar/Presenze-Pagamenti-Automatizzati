@@ -3085,166 +3085,238 @@ def step525_zero_selected_days_on_record(record: dict, selected_days: list[int])
 
 
 def render_generation_page():
-    render_generation_page_step45()
+    step4_ensure_session_state()
+
+    render_page_title("2. Generazione fogli")
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
 
     if not st.session_state.get("master_loaded", False):
+        st.warning("Prima carica e verifica i master nella sezione 'Origine dati'.")
+        st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    anno = int(st.session_state.get("anno_step3", date.today().year))
-    mese = int(st.session_state.get("mese_step3", date.today().month))
-
-    societa_options = sorted(
-        list(
-            set(
-                st.session_state["df_edicola"]["AGENZIA"].dropna().astype(str).str.strip().tolist()
-                + st.session_state["df_libri"]["AGENZIA"].dropna().astype(str).str.strip().tolist()
-            )
+    col_top1, col_top2 = st.columns(2)
+    with col_top1:
+        anno = st.selectbox(
+            "Anno",
+            [2025, 2026, 2027],
+            index=1,
+            key="anno_step3",
         )
+    with col_top2:
+        mese = st.selectbox(
+            "Mese",
+            list(MESI.keys()),
+            format_func=lambda x: MESI[x],
+            index=0,
+            key="mese_step3",
+        )
+
+    full_table = st.session_state["generation_table"].copy()
+
+    if full_table.empty:
+        st.warning("Nessuna riga disponibile per la generazione dei fogli.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    def is_created(row_id: str) -> bool:
+        key = format_sheet_key(normalize_text(row_id), anno, mese)
+        return key in st.session_state["fogli_generati"]
+
+    full_table["STATO_FOGLIO"] = full_table["ROW_ID"].apply(
+        lambda rid: "CREATO" if is_created(rid) else "NON CREATO"
     )
 
-    if not societa_options:
-        return
+    totale_righe = len(full_table)
+    fogli_creati = int((full_table["STATO_FOGLIO"] == "CREATO").sum())
+    fogli_mancanti = int((full_table["STATO_FOGLIO"] == "NON CREATO").sum())
 
-    st.markdown('<div class="section-box">', unsafe_allow_html=True)
-    st.markdown('<div class="step4-action-box">', unsafe_allow_html=True)
-    st.markdown('<div class="step4-action-title">AZZERAMENTO MASSIVO</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="step4-action-subtitle">Azzera le ore di più fogli presenza insieme senza aprirli uno per uno</div>',
+        """
+        <div class="soft-note">
+            <b>Controllo fogli del mese</b><br>
+            La tabella mostra tutte le righe operative del mese.<br>
+            Usa lo stato foglio per controllare con certezza quali fogli sono già presenti e quali mancano.
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
-    col_m1, col_m2 = st.columns(2)
-    with col_m1:
-        step525_societa = st.selectbox("Società", societa_options, key="step525_societa")
-    with col_m2:
-        step525_attivita = st.selectbox("Attività", [ORIGINE_EDICOLA, ORIGINE_LIBRI], key="step525_attivita")
+    met1, met2, met3 = st.columns(3)
+    with met1:
+        st.metric("Totale righe mese", totale_righe)
+    with met2:
+        st.metric("Fogli creati", fogli_creati)
+    with met3:
+        st.metric("Fogli mancanti", fogli_mancanti)
 
-    col_m3, col_m4 = st.columns(2)
-    with col_m3:
-        step525_tipo_giorno = st.selectbox(
-            "Giorno singolo oppure periodo",
-            ["Giorno singolo", "Periodo"],
-            key="step525_tipo_giorno",
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+    st.markdown('<div class="table-title">Tabella principale fogli del mese</div>', unsafe_allow_html=True)
+
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        filtro_nome = st.text_input(
+            "Filtro semplice nome/cognome",
+            placeholder="Scrivi nome o cognome",
+            key="step3_filtro_nome",
         )
-    with col_m4:
-        primo_giorno = date(anno, mese, 1)
-        ultimo_giorno = date(anno, mese, calendar.monthrange(anno, mese)[1])
-
-        giorno_singolo_value = None
-        periodo_value = None
-
-        if step525_tipo_giorno == "Giorno singolo":
-            giorno_singolo_value = st.date_input(
-                "Giorno singolo",
-                value=primo_giorno,
-                min_value=primo_giorno,
-                max_value=ultimo_giorno,
-                key="step525_giorno_singolo",
-            )
-        else:
-            periodo_value = st.date_input(
-                "Periodo",
-                value=(primo_giorno, primo_giorno),
-                min_value=primo_giorno,
-                max_value=ultimo_giorno,
-                key="step525_periodo",
-            )
-
-    selected_days = step525_get_selected_days(
-        anno=anno,
-        mese=mese,
-        modo=step525_tipo_giorno,
-        giorno_singolo_value=giorno_singolo_value,
-        periodo_value=periodo_value,
-    )
-
-    filtro_nome = st.text_input(
-        "Filtro tabella azzeramento massivo",
-        placeholder="Nome / cognome / pdv",
-        key="step525_filtro",
-    )
-
-    massive_table = step525_build_massive_table(
-        anno=anno,
-        mese=mese,
-        societa=step525_societa,
-        attivita=step525_attivita,
-    )
-
-    if filtro_nome.strip() and not massive_table.empty:
-        filtro_up = filtro_nome.strip().upper()
-        mask = (
-            massive_table["NOMINATIVO_DIPENDENTE"].astype(str).str.upper().str.contains(filtro_up, na=False)
-            | massive_table["PDV"].astype(str).str.upper().str.contains(filtro_up, na=False)
-        )
-        massive_table = massive_table[mask].copy()
-
-    st.markdown('<div class="separator-help"><b>Seleziona i fogli presenza da azzerare</b></div>', unsafe_allow_html=True)
-
-    if massive_table.empty:
-        st.info("Nessun foglio presenza coerente trovato per i criteri selezionati.")
-    else:
-        edited_massive = st.data_editor(
-            massive_table,
-            hide_index=True,
-            use_container_width=True,
-            num_rows="fixed",
-            column_config={
-                "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
-                "FOGLIO_KEY": None,
-                "NOMINATIVO_DIPENDENTE": st.column_config.TextColumn("Nominativo dipendente", disabled=True),
-                "PDV": st.column_config.TextColumn("PDV", disabled=True),
-                "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
-                "TIPO_ATTIVITA": st.column_config.TextColumn("Tipo attività", disabled=True),
-            },
-            key="step525_massive_table",
+    with col_f2:
+        filtro_stato = st.selectbox(
+            "Filtro stato foglio",
+            ["TUTTI", "CREATO", "NON CREATO"],
+            key="step3_filtro_stato",
         )
 
-        selected_rows = edited_massive[edited_massive["SELEZIONA"] == True].copy()
-        count_selected = len(selected_rows)
+    generation_table = full_table.copy()
 
-        if selected_days and count_selected > 0:
-            st.markdown(
-                f"""
-                <div class="soft-note">
-                    <b>Conferma operativa</b><br>
-                    Fogli selezionati: {count_selected}<br>
-                    Intervallo da azzerare: {step525_days_text(selected_days)}
-                </div>
-                """,
-                unsafe_allow_html=True,
+    if filtro_nome.strip():
+        mask_nome = generation_table["NOME"].astype(str).str.upper().str.contains(
+            filtro_nome.strip().upper(),
+            na=False,
+        )
+        generation_table = generation_table[mask_nome].copy()
+
+    if filtro_stato != "TUTTI":
+        generation_table = generation_table[generation_table["STATO_FOGLIO"] == filtro_stato].copy()
+
+    if generation_table.empty:
+        st.info("Nessun risultato trovato con i filtri inseriti.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    generation_table = generation_table.reset_index(drop=True)
+
+    st.markdown(
+        """
+        <div class="soft-note">
+            <b>Selezione assistita fino a 50 righe</b><br>
+            Puoi filtrare la tabella, selezionare manualmente i fogli mancanti oppure usare la selezione a blocchi.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    start_row_idx = st.selectbox(
+        "Riga di partenza per selezione assistita (max 50 righe)",
+        options=list(generation_table.index),
+        format_func=lambda i: (
+            f"{generation_table.loc[i, 'NOME']} | "
+            f"{generation_table.loc[i, 'SOCIETA']} | "
+            f"{generation_table.loc[i, 'PDV']} | "
+            f"{generation_table.loc[i, 'ATTIVITA_RIGA']} | "
+            f"{generation_table.loc[i, 'STATO_FOGLIO']}"
+        ),
+        key="step3_start_row_idx",
+    )
+
+    col_sel1, col_sel2 = st.columns(2)
+
+    with col_sel1:
+        if st.button("Seleziona 50 righe da qui in giù", use_container_width=True, key="step3_select_50"):
+            row_ids_to_select = generation_table.loc[start_row_idx:, "ROW_ID"].tolist()[:50]
+            base_table = st.session_state["generation_table"].copy()
+            base_table.loc[base_table["ROW_ID"].isin(row_ids_to_select), "SELEZIONA"] = True
+            st.session_state["generation_table"] = base_table
+            st.rerun()
+
+    with col_sel2:
+        if st.button("Deseleziona tutte le righe visibili", use_container_width=True, key="step3_deselect_visible"):
+            visible_row_ids = generation_table["ROW_ID"].tolist()
+            base_table = st.session_state["generation_table"].copy()
+            base_table.loc[base_table["ROW_ID"].isin(visible_row_ids), "SELEZIONA"] = False
+            st.session_state["generation_table"] = base_table
+            st.rerun()
+
+    editor_table = st.session_state["generation_table"].copy()
+    editor_table["STATO_FOGLIO"] = editor_table["ROW_ID"].apply(
+        lambda rid: "CREATO" if is_created(rid) else "NON CREATO"
+    )
+
+    if filtro_nome.strip():
+        mask_editor_nome = editor_table["NOME"].astype(str).str.upper().str.contains(
+            filtro_nome.strip().upper(),
+            na=False,
+        )
+        editor_table = editor_table[mask_editor_nome].copy()
+
+    if filtro_stato != "TUTTI":
+        editor_table = editor_table[editor_table["STATO_FOGLIO"] == filtro_stato].copy()
+
+    edited = st.data_editor(
+        editor_table.reset_index(drop=True),
+        hide_index=True,
+        use_container_width=True,
+        num_rows="fixed",
+        column_config={
+            "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
+            "ROW_ID": None,
+            "MASTER_INDEX": None,
+            "STATO_FOGLIO": st.column_config.TextColumn("Stato foglio", disabled=True),
+            "ORIGINE_MASTER": st.column_config.TextColumn("Origine", disabled=True),
+            "TIPO_LIBRI": st.column_config.TextColumn("Tipo libri", disabled=True),
+            "NOME": st.column_config.TextColumn("Nome", disabled=True),
+            "COD_FISCALE": st.column_config.TextColumn("CF", disabled=True),
+            "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
+            "PDV": st.column_config.TextColumn("PDV", disabled=True),
+            "TELEFONO": st.column_config.TextColumn("Telefono", disabled=True),
+            "EMAIL": st.column_config.TextColumn("Email", disabled=True),
+            "NETTO_ORA": st.column_config.NumberColumn("Netto orario", format="%.2f €", disabled=True),
+            "NETTO_MESE": st.column_config.NumberColumn("Netto mese", format="%.2f €", disabled=True),
+            "TIPO_CONTRATTO": st.column_config.TextColumn("Tipo contratto", disabled=True),
+            "SCADENZA_CONTRATTO": st.column_config.TextColumn("Scadenza contratto", disabled=True),
+            "ATTIVITA_RIGA": st.column_config.TextColumn("Attività", disabled=True),
+        },
+        key="editor_generation_table_final",
+    )
+
+    updated_base_table = st.session_state["generation_table"].copy()
+    for _, row in edited[["ROW_ID", "SELEZIONA"]].iterrows():
+        updated_base_table.loc[updated_base_table["ROW_ID"] == row["ROW_ID"], "SELEZIONA"] = bool(row["SELEZIONA"])
+    st.session_state["generation_table"] = updated_base_table
+
+    if st.button("Genera fogli presenze selezionati", type="primary", use_container_width=True, key="step3_genera_fogli_final"):
+        selected = st.session_state["generation_table"][st.session_state["generation_table"]["SELEZIONA"] == True].copy()
+
+        if selected.empty:
+            st.warning("Seleziona almeno una riga.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
+
+        if len(selected) > 50:
+            st.error("Puoi generare al massimo 50 fogli presenza per volta.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
+
+        last_key = None
+
+        for _, row in selected.iterrows():
+            key = format_sheet_key(normalize_text(row["ROW_ID"]), anno, mese)
+
+            if key in st.session_state["fogli_generati"]:
+                continue
+
+            st.session_state["fogli_generati"][key] = init_sheet_record(
+                row=row,
+                df_edicola=st.session_state["df_edicola"],
+                df_libri=st.session_state["df_libri"],
+                anno=anno,
+                mese=mese,
             )
+            st.session_state["sheet_warnings"][key] = []
+            last_key = key
 
-        if st.button("AZZERA ORE", type="primary", use_container_width=True, key="step525_btn_azzera"):
-            if not selected_days:
-                st.error("Giorno o periodo non valido per il mese selezionato.")
-                st.markdown("</div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-                return
+        if last_key:
+            st.session_state["foglio_attivo"] = last_key
 
-            if count_selected == 0:
-                st.error("Seleziona almeno un foglio presenza dalla tabella.")
-                st.markdown("</div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-                return
+        updated_base_table = st.session_state["generation_table"].copy()
+        updated_base_table.loc[updated_base_table["ROW_ID"].isin(selected["ROW_ID"].tolist()), "SELEZIONA"] = False
+        st.session_state["generation_table"] = updated_base_table
 
-            modificati = 0
-
-            for _, row in selected_rows.iterrows():
-                foglio_key = row["FOGLIO_KEY"]
-                if foglio_key not in st.session_state["fogli_generati"]:
-                    continue
-
-                record = st.session_state["fogli_generati"][foglio_key]
-
-                if record.get("lucchetto_mese", False) or record.get("lucchetto_foglio", False):
-                    continue
-
-                step525_zero_selected_days_on_record(record, selected_days)
-                st.session_state["sheet_warnings"][foglio_key] = []
-                modificati += 1
-
-            st.success(f"Azzeramento massivo completato correttamente. Fogli modificati: {modificati}")
+        st.success("Generazione fogli completata correttamente.")
+        st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
