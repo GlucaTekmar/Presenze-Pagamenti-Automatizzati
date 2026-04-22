@@ -3251,29 +3251,85 @@ def render_generation_page():
 
 # =========================
 # APP
+# STRUTTURA DEFINITIVA A 5 PAGINE
 # =========================
 
-ensure_session_state()
-inject_global_css()
-render_header()
+def render_page_nuovi_fogli_placeholder():
+    render_page_title("4. Nuovi fogli / sostituzioni / azzeramenti")
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
 
-with st.sidebar:
-    st.markdown('<div class="sidebar-logo-wrap">', unsafe_allow_html=True)
-    st.image(LOGO_URL, width=170)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    sezione = st.radio(
-        "Sezioni operative",
-        [
-            "Caricamento master",
-            "Generazione fogli",
-            "Gestione foglio",
-        ],
+    st.markdown(
+        """
+        <div class="soft-note">
+            Questa pagina è stata predisposta come contenitore definitivo di:
+            <br>- Nuovo foglio / sostituzione
+            <br>- Azzeramento massivo
+            <br><br>
+            Nel blocco successivo sposteremo qui le funzioni operative reali,
+            senza duplicare la logica e senza lasciare residui nella pagina 2.
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
-if sezione == "Caricamento master":
-    render_master_page()
-elif sezione == "Generazione fogli":
-    render_generation_page()
-else:
-    render_sheet_page()
+    st.info("Pagina predisposta correttamente. Le funzioni operative verranno agganciate nel prossimo blocco.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_page_chiusura_mese_placeholder():
+    render_page_title("5. Chiusura mese")
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
+
+    st.markdown(
+        """
+        <div class="soft-note">
+            Questa pagina è stata predisposta come contenitore definitivo della chiusura mese:
+            <br>- Export Excel riepilogo mese
+            <br>- Export PDF fogli presenza
+            <br>- Export PDF / allegati giustificativi
+            <br><br>
+            I tasti reali verranno inseriti nel blocco dedicato allo STEP 6.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.info("Pagina predisposta correttamente. Gli export verranno agganciati più avanti.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def main():
+    ensure_session_state()
+    inject_global_css()
+    render_header()
+
+    with st.sidebar:
+        st.markdown('<div class="sidebar-logo-wrap">', unsafe_allow_html=True)
+        st.image(LOGO_URL, width=170)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        sezione = st.radio(
+            "Sezioni operative",
+            [
+                "Origine dati",
+                "Generazione fogli",
+                "Fogli presenza",
+                "Nuovi fogli / sostituzioni / azzeramenti",
+                "Chiusura mese",
+            ],
+            key="main_navigation_radio",
+        )
+
+    if sezione == "Origine dati":
+        render_master_page()
+    elif sezione == "Generazione fogli":
+        render_generation_page()
+    elif sezione == "Fogli presenza":
+        render_sheet_page()
+    elif sezione == "Nuovi fogli / sostituzioni / azzeramenti":
+        render_page_nuovi_fogli_placeholder()
+    elif sezione == "Chiusura mese":
+        render_page_chiusura_mese_placeholder()
+
+
+main()
