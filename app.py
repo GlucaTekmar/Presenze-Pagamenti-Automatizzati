@@ -1853,7 +1853,12 @@ def render_sheet_page():
     if st.session_state["foglio_attivo"] not in keys:
         st.session_state["foglio_attivo"] = keys[0]
 
-    filtro = st.text_input("Filtro semplice fogli (nome o PDV)", placeholder="Nome o PDV", key="filtro_fogli_presenza")
+    filtro = st.text_input(
+        "Filtro semplice fogli (nome o PDV)",
+        placeholder="Nome o PDV",
+        key="filtro_fogli_presenza",
+    )
+
     filtered_keys = keys
     if filtro.strip():
         up = filtro.strip().upper()
@@ -1887,51 +1892,151 @@ def render_sheet_page():
     st.session_state["foglio_attivo"] = selected_key
     record = st.session_state["fogli_generati"][selected_key]
     locked = record["lucchetto_mese"] or record["lucchetto_foglio"]
+    is_step4 = bool(record.get("is_step4", False))
 
     warnings = st.session_state["sheet_warnings"].get(selected_key, [])
     if warnings:
         for msg in warnings:
             render_warning_box(msg)
 
+    # =========================
     # INTESTAZIONE
+    # =========================
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        record["societa"] = st.text_input("Società", value=record["societa"], disabled=locked, key=f"societa_{selected_key}")
-        st.text_input("Attività", value=record["attivita_riga"], disabled=True, key=f"attivita_{selected_key}")
-        nome_disabled = locked if record.get("step4_modalita", "") == "Foglio presenza vuoto" else True
-        record["nome"] = st.text_input("Nome", value=record["nome"], disabled=nome_disabled, key=f"nome_{selected_key}")
-    with c2:
-        cf_disabled = locked if record.get("step4_modalita", "") == "Foglio presenza vuoto" else True
-        pdv_disabled = locked if record.get("step4_modalita", "") == "Foglio presenza vuoto" else True
-        record["cf"] = st.text_input("CF", value=record["cf"], disabled=cf_disabled, key=f"cf_{selected_key}")
-        record["pdv"] = st.text_input("PDV", value=record["pdv"], disabled=pdv_disabled, key=f"pdv_{selected_key}")
-        st.text_input("Mese", value=f"{MESI[record['mese']]} {record['anno']}", disabled=True, key=f"mese_{selected_key}")
-    with c3:
-        record["tipo_contratto"] = st.text_input("Tipo contratto", value=record["tipo_contratto"], disabled=locked, key=f"tipo_contratto_{selected_key}")
-        record["scadenza_contratto"] = st.text_input("Scadenza contratto", value=record["scadenza_contratto"], disabled=locked, key=f"scadenza_{selected_key}")
-        st.number_input("NETTO MESE", value=float(record["netto_mese"]), disabled=True, key=f"netto_mese_{selected_key}")
-    with c4:
-        record["netto_ora"] = st.number_input("Netto orario", value=float(record["netto_ora"]), step=0.10, disabled=locked, key=f"netto_ora_{selected_key}")
-        st.number_input("Giorni lavorati", value=int(record["giorni_lavorati"]), disabled=True, key=f"giorni_lavorati_{selected_key}")
-        st.number_input("Giorni modificati", value=int(record["giorni_modificati"]), disabled=True, key=f"giorni_modificati_{selected_key}")
 
-    c5, c6, c7 = st.columns(3)
-    with c5:
-        st.number_input("Tot ore lavorative mese", value=float(record["tot_ore_lavorative_mese"]), disabled=True, key=f"tot_ore_{selected_key}")
-    with c6:
-        st.number_input("Tot ore azzerate", value=float(record["tot_ore_azzerate"]), disabled=True, key=f"tot_ore_azzerate_{selected_key}")
-    with c7:
-        st.number_input("Tot € da scalare", value=float(record["tot_euro_da_scalare"]), disabled=True, key=f"tot_scalare_{selected_key}")
+    if is_step4:
+        st.markdown(
+            """
+            <div class="soft-note">
+                Foglio creato con Nuovo foglio / Sostituzione.
+                Intestazione semplificata attiva.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    cl1, cl2 = st.columns(2)
-    with cl1:
-        record["lucchetto_foglio"] = st.checkbox("Lucchetto foglio", value=record["lucchetto_foglio"], disabled=record["lucchetto_mese"], key=f"lock_foglio_{selected_key}")
-    with cl2:
-        record["lucchetto_mese"] = st.checkbox("Lucchetto mese", value=record["lucchetto_mese"], key=f"lock_mese_{selected_key}")
+        col_h1, col_h2, col_h3 = st.columns(3)
+        with col_h1:
+            record["nome"] = st.text_input(
+                "Nome",
+                value=record["nome"],
+                disabled=locked,
+                key=f"step4_nome_{selected_key}",
+            )
+            record["cf"] = st.text_input(
+                "Codice Fiscale",
+                value=record["cf"],
+                disabled=locked,
+                key=f"step4_cf_{selected_key}",
+            )
+        with col_h2:
+            record["pdv"] = st.text_input(
+                "PDV",
+                value=record["pdv"],
+                disabled=locked,
+                key=f"step4_pdv_{selected_key}",
+            )
+            record["tipo_contratto"] = st.text_input(
+                "Tipo contratto",
+                value=record["tipo_contratto"],
+                disabled=locked,
+                key=f"step4_tipo_contratto_{selected_key}",
+            )
+        with col_h3:
+            record["scadenza_contratto"] = st.text_input(
+                "Scadenza contratto",
+                value=record["scadenza_contratto"],
+                disabled=locked,
+                key=f"step4_scadenza_{selected_key}",
+            )
+            record["netto_ora"] = st.number_input(
+                "Netto ora",
+                value=float(record["netto_ora"]),
+                step=0.10,
+                disabled=locked,
+                key=f"step4_netto_ora_{selected_key}",
+            )
+
+        col_lock1, col_lock2 = st.columns(2)
+        with col_lock1:
+            record["lucchetto_foglio"] = st.checkbox(
+                "Lucchetto foglio",
+                value=record["lucchetto_foglio"],
+                disabled=record["lucchetto_mese"],
+                key=f"step4_lock_foglio_{selected_key}",
+            )
+        with col_lock2:
+            record["lucchetto_mese"] = st.checkbox(
+                "Lucchetto mese",
+                value=record["lucchetto_mese"],
+                key=f"step4_lock_mese_{selected_key}",
+            )
+
+    else:
+        col_h1, col_h2, col_h3, col_h4 = st.columns(4)
+        with col_h1:
+            st.text_input("Società", value=record["societa"], disabled=True, key=f"societa_{selected_key}")
+            st.text_input("Attività", value=record["attivita_riga"], disabled=True, key=f"attivita_{selected_key}")
+            st.text_input("Nome", value=record["nome"], disabled=True, key=f"nome_{selected_key}")
+        with col_h2:
+            st.text_input("CF", value=record["cf"], disabled=True, key=f"cf_{selected_key}")
+            st.text_input("PDV", value=record["pdv"], disabled=True, key=f"pdv_{selected_key}")
+            st.text_input("Mese", value=f"{MESI[record['mese']]} {record['anno']}", disabled=True, key=f"mese_{selected_key}")
+        with col_h3:
+            record["tipo_contratto"] = st.text_input(
+                "Tipo contratto",
+                value=record["tipo_contratto"],
+                disabled=locked,
+                key=f"tipo_contratto_{selected_key}",
+            )
+            record["scadenza_contratto"] = st.text_input(
+                "Scadenza contratto",
+                value=record["scadenza_contratto"],
+                disabled=locked,
+                key=f"scadenza_{selected_key}",
+            )
+            st.number_input("NETTO MESE", value=float(record["netto_mese"]), disabled=True, key=f"netto_mese_{selected_key}")
+        with col_h4:
+            record["netto_ora"] = st.number_input(
+                "Netto orario",
+                value=float(record["netto_ora"]),
+                step=0.10,
+                disabled=locked,
+                key=f"netto_ora_{selected_key}",
+            )
+            st.number_input("Giorni lavorati", value=int(record["giorni_lavorati"]), disabled=True, key=f"giorni_lavorati_{selected_key}")
+            st.number_input("Giorni modificati", value=int(record["giorni_modificati"]), disabled=True, key=f"giorni_modificati_{selected_key}")
+
+        col_h5, col_h6, col_h7 = st.columns(3)
+        with col_h5:
+            st.number_input("Tot ore lavorative mese", value=float(record["tot_ore_lavorative_mese"]), disabled=True, key=f"tot_ore_{selected_key}")
+        with col_h6:
+            st.number_input("Tot ore ridotte/azzerate", value=float(record["tot_ore_azzerate"]), disabled=True, key=f"tot_ore_azzerate_{selected_key}")
+        with col_h7:
+            st.number_input("Tot € da scalare", value=float(record["tot_euro_da_scalare"]), disabled=True, key=f"tot_scalare_{selected_key}")
+
+        col_lock1, col_lock2 = st.columns(2)
+        with col_lock1:
+            record["lucchetto_foglio"] = st.checkbox(
+                "Lucchetto foglio",
+                value=record["lucchetto_foglio"],
+                disabled=record["lucchetto_mese"],
+                key=f"lock_foglio_{selected_key}",
+            )
+        with col_lock2:
+            record["lucchetto_mese"] = st.checkbox(
+                "Lucchetto mese",
+                value=record["lucchetto_mese"],
+                key=f"lock_mese_{selected_key}",
+            )
+
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # CORPO
+    locked = record["lucchetto_mese"] or record["lucchetto_foglio"]
+
+    # =========================
+    # CORPO FOGLIO
+    # =========================
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
     st.markdown('<div class="table-title">Corpo foglio presenze</div>', unsafe_allow_html=True)
 
@@ -1940,10 +2045,17 @@ def render_sheet_page():
 
     if origine == ORIGINE_EDICOLA:
         visible_cols = [
-            "GIORNO_NUM", "DATA_VIEW", "GIORNO_SETTIMANA",
-            "EDICOLA_ORE", "EDICOLA_€", "EDICOLA_TIPO_ASSENZA", "FESTIVO"
+            "GIORNO_NUM",
+            "DATA_VIEW",
+            "GIORNO_SETTIMANA",
+            "EDICOLA_ORE",
+            "EDICOLA_€",
+            "EDICOLA_TIPO_ASSENZA",
+            "FESTIVO",
         ]
+
         display_df = record["tabella"][COLONNE_TABELLA_TECNICHE].copy().reset_index(drop=True)
+
         edited = st.data_editor(
             display_df[visible_cols],
             hide_index=True,
@@ -1977,11 +2089,20 @@ def render_sheet_page():
 
     else:
         visible_cols = [
-            "GIORNO_NUM", "DATA_VIEW", "GIORNO_SETTIMANA",
-            "MONDADORI_ORE", "MONDADORI_€", "MONDADORI_TIPO_ASSENZA",
-            "GIUNTI_ORE", "GIUNTI_€", "GIUNTI_TIPO_ASSENZA", "FESTIVO"
+            "GIORNO_NUM",
+            "DATA_VIEW",
+            "GIORNO_SETTIMANA",
+            "MONDADORI_ORE",
+            "MONDADORI_€",
+            "MONDADORI_TIPO_ASSENZA",
+            "GIUNTI_ORE",
+            "GIUNTI_€",
+            "GIUNTI_TIPO_ASSENZA",
+            "FESTIVO",
         ]
+
         display_df = record["tabella"][COLONNE_TABELLA_TECNICHE].copy().reset_index(drop=True)
+
         edited = st.data_editor(
             display_df[visible_cols],
             hide_index=True,
@@ -2020,7 +2141,9 @@ def render_sheet_page():
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # FONDO
+    # =========================
+    # FONDO FOGLIO
+    # =========================
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
     st.markdown('<div class="table-title">Fondo foglio</div>', unsafe_allow_html=True)
 
@@ -2033,25 +2156,37 @@ def render_sheet_page():
         record["note_generali"],
     )
 
-    b1, b2, b3, b4, b5 = st.columns(5)
-    with b1:
+    col_b1, col_b2, col_b3, col_b4, col_b5 = st.columns(5)
+    with col_b1:
         record["arretrati"] = st.number_input("€ arretrato", value=float(record["arretrati"]), step=0.50, disabled=locked, key=f"arretrati_{selected_key}")
-    with b2:
+    with col_b2:
         record["extra"] = st.number_input("€ extra", value=float(record["extra"]), step=0.50, disabled=locked, key=f"extra_{selected_key}")
-    with b3:
+    with col_b3:
         record["affiancamenti"] = st.number_input("€ affiancamento", value=float(record["affiancamenti"]), step=0.50, disabled=locked, key=f"affiancamenti_{selected_key}")
-    with b4:
+    with col_b4:
         record["domeniche"] = st.number_input("€ domeniche", value=float(record["domeniche"]), step=0.50, disabled=locked, key=f"domeniche_{selected_key}")
-    with b5:
+    with col_b5:
         record["rimborso"] = st.number_input("€ rimborso", value=float(record["rimborso"]), step=0.50, disabled=locked, key=f"rimborso_{selected_key}")
 
-    uploaded_docs = st.file_uploader("Allegati rimborso", accept_multiple_files=True, disabled=locked, key=f"rimborso_upload_{selected_key}")
+    uploaded_docs = st.file_uploader(
+        "Allegati rimborso",
+        accept_multiple_files=True,
+        disabled=locked,
+        key=f"rimborso_upload_{selected_key}",
+    )
     if uploaded_docs is not None:
         record["rimborso_allegati"] = [file.name for file in uploaded_docs]
+
     if record["rimborso_allegati"]:
         st.caption("Allegati caricati: " + ", ".join(record["rimborso_allegati"]))
 
-    record["note_generali"] = st.text_area("NOTE GENERALI DEL MESE", value=record["note_generali"], height=130, disabled=locked, key=f"note_generali_{selected_key}")
+    record["note_generali"] = st.text_area(
+        "NOTE GENERALI DEL MESE",
+        value=record["note_generali"],
+        height=130,
+        disabled=locked,
+        key=f"note_generali_{selected_key}",
+    )
 
     update_sheet_totals(record)
     new_fondo = (
@@ -2067,12 +2202,14 @@ def render_sheet_page():
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # TOTALE
+    # =========================
+    # TOTALE FINALE
+    # =========================
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
     st.markdown('<div class="table-title">Totale finale</div>', unsafe_allow_html=True)
 
-    tt1, tt2 = st.columns([2, 1])
-    with tt1:
+    col_t1, col_t2 = st.columns([2, 1])
+    with col_t1:
         st.markdown(
             """
             <div class="soft-note">
@@ -2082,19 +2219,21 @@ def render_sheet_page():
             """,
             unsafe_allow_html=True,
         )
-    with tt2:
+    with col_t2:
         st.metric("TOT NETTO MESE", f"€ {record['tot_netto_mese']:.2f}")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # =========================
     # TASTI
-    t1, t2 = st.columns(2)
-    with t1:
+    # =========================
+    col_reset1, col_reset2 = st.columns(2)
+    with col_reset1:
         if st.button("Azzera ore foglio", disabled=locked, use_container_width=True, key=f"azzera_{selected_key}"):
             clear_entire_sheet(record)
             st.session_state["sheet_warnings"][selected_key] = []
             st.rerun()
-    with t2:
+    with col_reset2:
         if st.button("Elimina foglio presenza", disabled=locked, use_container_width=True, key=f"elimina_{selected_key}"):
             row_id = record["row_id"]
             del st.session_state["fogli_generati"][selected_key]
@@ -2107,25 +2246,6 @@ def render_sheet_page():
             st.session_state["foglio_attivo"] = remaining[0] if remaining else None
             st.rerun()
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def render_chiusura_mese_page():
-    render_page_title("5. Chiusura mese")
-    st.markdown('<div class="section-box">', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="soft-note">
-            Pagina predisposta per:
-            <br>- Export Excel riepilogo mese
-            <br>- Export PDF fogli presenza
-            <br>- Export PDF / allegati giustificativi
-            <br>- Pulizia mese separata e protetta
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.info("Blocco export / chiusura mese da implementare nel prossimo step.")
     st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================
