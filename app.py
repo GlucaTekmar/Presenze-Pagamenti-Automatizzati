@@ -1362,6 +1362,27 @@ def render_generation_page():
     render_page_title("2. Generazione fogli")
     st.markdown('<div class="section-box">', unsafe_allow_html=True)
 
+    if "step4_table" not in st.session_state:
+        st.session_state["step4_table"] = pd.DataFrame(
+            columns=[
+                "ROW_ID",
+                "STATO_FOGLIO",
+                "ORIGINE_MASTER",
+                "TIPO_LIBRI",
+                "NOME",
+                "COD_FISCALE",
+                "SOCIETA",
+                "PDV",
+                "TELEFONO",
+                "EMAIL",
+                "NETTO_ORA",
+                "NETTO_MESE",
+                "TIPO_CONTRATTO",
+                "SCADENZA_CONTRATTO",
+                "ATTIVITA_RIGA",
+            ]
+        )
+
     if not st.session_state["master_loaded"]:
         st.warning("Prima carica e verifica i master nella sezione 'Origine dati'.")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1373,6 +1394,9 @@ def render_generation_page():
     with col2:
         mese = st.selectbox("Mese", list(MESI.keys()), format_func=lambda x: MESI[x], index=0, key="mese_step3")
 
+    # =========================
+    # TABELLA PRINCIPALE DA MASTER
+    # =========================
     full_table = st.session_state["generation_table"].copy()
     if full_table.empty:
         st.warning("Nessuna riga disponibile.")
@@ -1383,7 +1407,9 @@ def render_generation_page():
         key = format_sheet_key(normalize_text(row_id), anno, mese)
         return key in st.session_state["fogli_generati"]
 
-    full_table["STATO_FOGLIO"] = full_table["ROW_ID"].apply(lambda rid: "CREATO" if is_created(rid) else "NON CREATO")
+    full_table["STATO_FOGLIO"] = full_table["ROW_ID"].apply(
+        lambda rid: "CREATO" if is_created(rid) else "NON CREATO"
+    )
 
     met1, met2, met3 = st.columns(3)
     with met1:
@@ -1398,16 +1424,25 @@ def render_generation_page():
 
     colf1, colf2 = st.columns(2)
     with colf1:
-        filtro_nome = st.text_input("Filtro semplice nome/cognome/PDV", placeholder="Nome o PDV", key="filtro_gen")
+        filtro_nome = st.text_input(
+            "Filtro semplice nome/cognome/PDV",
+            placeholder="Nome o PDV",
+            key="filtro_gen",
+        )
     with colf2:
-        filtro_stato = st.selectbox("Filtro stato", ["TUTTI", "CREATO", "NON CREATO"], key="filtro_stato")
+        filtro_stato = st.selectbox(
+            "Filtro stato",
+            ["TUTTI", "CREATO", "NON CREATO"],
+            key="filtro_stato",
+        )
 
     table = full_table.copy()
+
     if filtro_nome.strip():
         up = filtro_nome.strip().upper()
         mask = (
-            table["NOME"].astype(str).str.upper().str.contains(up, na=False) |
-            table["PDV"].astype(str).str.upper().str.contains(up, na=False)
+            table["NOME"].astype(str).str.upper().str.contains(up, na=False)
+            | table["PDV"].astype(str).str.upper().str.contains(up, na=False)
         )
         table = table[mask].copy()
 
@@ -1416,126 +1451,188 @@ def render_generation_page():
 
     if table.empty:
         st.info("Nessun risultato trovato con i filtri inseriti.")
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-        return
+    else:
+        table = table.reset_index(drop=True)
 
-    table = table.reset_index(drop=True)
-
-    start_row_idx = st.selectbox(
-        "Riga di partenza per selezione assistita (max 50)",
-        options=list(table.index),
-        format_func=lambda i: (
-            f"{table.loc[i, 'NOME']} | {table.loc[i, 'PDV']} | {table.loc[i, 'ATTIVITA_RIGA']} | {table.loc[i, 'STATO_FOGLIO']}"
-        ),
-        key="start_row_idx",
-    )
-
-    csel1, csel2 = st.columns(2)
-    with csel1:
-        if st.button("Seleziona 50 righe da qui in giù", use_container_width=True, key="sel50"):
-            row_ids = table.loc[start_row_idx:, "ROW_ID"].tolist()[:50]
-            base = st.session_state["generation_table"].copy()
-            base.loc[base["ROW_ID"].isin(row_ids), "SELEZIONA"] = True
-            st.session_state["generation_table"] = base
-            st.rerun()
-    with csel2:
-        if st.button("Deseleziona righe visibili", use_container_width=True, key="desel_vis"):
-            row_ids = table["ROW_ID"].tolist()
-            base = st.session_state["generation_table"].copy()
-            base.loc[base["ROW_ID"].isin(row_ids), "SELEZIONA"] = False
-            st.session_state["generation_table"] = base
-            st.rerun()
-
-    editor_table = st.session_state["generation_table"].copy()
-    editor_table["STATO_FOGLIO"] = editor_table["ROW_ID"].apply(lambda rid: "CREATO" if is_created(rid) else "NON CREATO")
-    if filtro_nome.strip():
-        up = filtro_nome.strip().upper()
-        mask = (
-            editor_table["NOME"].astype(str).str.upper().str.contains(up, na=False) |
-            editor_table["PDV"].astype(str).str.upper().str.contains(up, na=False)
+        start_row_idx = st.selectbox(
+            "Riga di partenza per selezione assistita (max 50)",
+            options=list(table.index),
+            format_func=lambda i: (
+                f"{table.loc[i, 'NOME']} | {table.loc[i, 'PDV']} | {table.loc[i, 'ATTIVITA_RIGA']} | {table.loc[i, 'STATO_FOGLIO']}"
+            ),
+            key="start_row_idx",
         )
-        editor_table = editor_table[mask].copy()
-    if filtro_stato != "TUTTI":
-        editor_table = editor_table[editor_table["STATO_FOGLIO"] == filtro_stato].copy()
 
-    edited = st.data_editor(
-        editor_table.reset_index(drop=True),
-        hide_index=True,
-        use_container_width=True,
-        num_rows="fixed",
-        column_config={
-            "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
-            "ROW_ID": None,
-            "MASTER_INDEX": None,
-            "IS_STEP4": None,
-            "ORIGINE": st.column_config.TextColumn("Origine", disabled=True),
-            "ORIGINE_MASTER": st.column_config.TextColumn("Attività base", disabled=True),
-            "TIPO_LIBRI": st.column_config.TextColumn("Tipo libri", disabled=True),
-            "STATO_FOGLIO": st.column_config.TextColumn("Stato foglio", disabled=True),
-            "NOME": st.column_config.TextColumn("Nome", disabled=True),
-            "COD_FISCALE": st.column_config.TextColumn("CF", disabled=True),
-            "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
-            "PDV": st.column_config.TextColumn("PDV", disabled=True),
-            "TELEFONO": st.column_config.TextColumn("Telefono", disabled=True),
-            "EMAIL": st.column_config.TextColumn("Email", disabled=True),
-            "NETTO_ORA": st.column_config.NumberColumn("Netto orario", format="%.2f €", disabled=True),
-            "NETTO_MESE": st.column_config.NumberColumn("Netto mese", format="%.2f €", disabled=True),
-            "TIPO_CONTRATTO": st.column_config.TextColumn("Tipo contratto", disabled=True),
-            "SCADENZA_CONTRATTO": st.column_config.TextColumn("Scadenza contratto", disabled=True),
-            "ATTIVITA_RIGA": st.column_config.TextColumn("Attività", disabled=True),
-        },
-        key="editor_generation_table_finale",
-    )
+        csel1, csel2 = st.columns(2)
+        with csel1:
+            if st.button("Seleziona 50 righe da qui in giù", use_container_width=True, key="sel50"):
+                row_ids = table.loc[start_row_idx:, "ROW_ID"].tolist()[:50]
+                base = st.session_state["generation_table"].copy()
+                base.loc[base["ROW_ID"].isin(row_ids), "SELEZIONA"] = True
+                st.session_state["generation_table"] = base
+                st.rerun()
 
-    updated = st.session_state["generation_table"].copy()
-    for _, row in edited[["ROW_ID", "SELEZIONA"]].iterrows():
-        updated.loc[updated["ROW_ID"] == row["ROW_ID"], "SELEZIONA"] = bool(row["SELEZIONA"])
-    st.session_state["generation_table"] = updated
+        with csel2:
+            if st.button("Deseleziona righe visibili", use_container_width=True, key="desel_vis"):
+                row_ids = table["ROW_ID"].tolist()
+                base = st.session_state["generation_table"].copy()
+                base.loc[base["ROW_ID"].isin(row_ids), "SELEZIONA"] = False
+                st.session_state["generation_table"] = base
+                st.rerun()
 
-    if st.button("Genera fogli presenze selezionati", type="primary", use_container_width=True, key="genera_fogli"):
-        selected = st.session_state["generation_table"][st.session_state["generation_table"]["SELEZIONA"] == True].copy()
+        editor_table = st.session_state["generation_table"].copy()
+        editor_table["STATO_FOGLIO"] = editor_table["ROW_ID"].apply(
+            lambda rid: "CREATO" if is_created(rid) else "NON CREATO"
+        )
 
-        if selected.empty:
-            st.warning("Seleziona almeno una riga.")
-            st.markdown("</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-            return
-
-        if len(selected) > 50:
-            st.error("Puoi generare al massimo 50 fogli per volta.")
-            st.markdown("</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-            return
-
-        last_key = None
-        for _, row in selected.iterrows():
-            key = format_sheet_key(normalize_text(row["ROW_ID"]), anno, mese)
-            if key in st.session_state["fogli_generati"]:
-                continue
-            if bool(row.get("IS_STEP4", False)):
-                continue
-
-            record = init_sheet_record_from_master(
-                row=row,
-                df_edicola=st.session_state["df_edicola"],
-                df_libri=st.session_state["df_libri"],
-                anno=anno,
-                mese=mese,
+        if filtro_nome.strip():
+            up = filtro_nome.strip().upper()
+            mask = (
+                editor_table["NOME"].astype(str).str.upper().str.contains(up, na=False)
+                | editor_table["PDV"].astype(str).str.upper().str.contains(up, na=False)
             )
-            st.session_state["fogli_generati"][key] = record
-            st.session_state["sheet_warnings"][key] = []
-            last_key = key
+            editor_table = editor_table[mask].copy()
 
-        if last_key:
-            st.session_state["foglio_attivo"] = last_key
+        if filtro_stato != "TUTTI":
+            editor_table = editor_table[editor_table["STATO_FOGLIO"] == filtro_stato].copy()
 
-        base = st.session_state["generation_table"].copy()
-        base.loc[base["ROW_ID"].isin(selected["ROW_ID"].tolist()), "SELEZIONA"] = False
-        st.session_state["generation_table"] = base
+        edited = st.data_editor(
+            editor_table.reset_index(drop=True),
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            column_config={
+                "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
+                "ROW_ID": None,
+                "MASTER_INDEX": None,
+                "IS_STEP4": None,
+                "ORIGINE": st.column_config.TextColumn("Origine", disabled=True),
+                "ORIGINE_MASTER": st.column_config.TextColumn("Attività base", disabled=True),
+                "TIPO_LIBRI": st.column_config.TextColumn("Tipo libri", disabled=True),
+                "STATO_FOGLIO": st.column_config.TextColumn("Stato foglio", disabled=True),
+                "NOME": st.column_config.TextColumn("Nome", disabled=True),
+                "COD_FISCALE": st.column_config.TextColumn("CF", disabled=True),
+                "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
+                "PDV": st.column_config.TextColumn("PDV", disabled=True),
+                "TELEFONO": st.column_config.TextColumn("Telefono", disabled=True),
+                "EMAIL": st.column_config.TextColumn("Email", disabled=True),
+                "NETTO_ORA": st.column_config.NumberColumn("Netto orario", format="%.2f €", disabled=True),
+                "NETTO_MESE": st.column_config.NumberColumn("Netto mese", format="%.2f €", disabled=True),
+                "TIPO_CONTRATTO": st.column_config.TextColumn("Tipo contratto", disabled=True),
+                "SCADENZA_CONTRATTO": st.column_config.TextColumn("Scadenza contratto", disabled=True),
+                "ATTIVITA_RIGA": st.column_config.TextColumn("Attività", disabled=True),
+            },
+            key="editor_generation_table_finale",
+        )
 
-        st.success("Generazione fogli completata correttamente.")
-        st.rerun()
+        updated = st.session_state["generation_table"].copy()
+        for _, row in edited[["ROW_ID", "SELEZIONA"]].iterrows():
+            updated.loc[updated["ROW_ID"] == row["ROW_ID"], "SELEZIONA"] = bool(row["SELEZIONA"])
+        st.session_state["generation_table"] = updated
+
+        if st.button("Genera fogli presenze selezionati", type="primary", use_container_width=True, key="genera_fogli"):
+            selected = st.session_state["generation_table"][
+                st.session_state["generation_table"]["SELEZIONA"] == True
+            ].copy()
+
+            if selected.empty:
+                st.warning("Seleziona almeno una riga.")
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+                return
+
+            if len(selected) > 50:
+                st.error("Puoi generare al massimo 50 fogli per volta.")
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+                return
+
+            last_key = None
+            for _, row in selected.iterrows():
+                key = format_sheet_key(normalize_text(row["ROW_ID"]), anno, mese)
+
+                if key in st.session_state["fogli_generati"]:
+                    continue
+
+                if bool(row.get("IS_STEP4", False)):
+                    continue
+
+                record = init_sheet_record_from_master(
+                    row=row,
+                    df_edicola=st.session_state["df_edicola"],
+                    df_libri=st.session_state["df_libri"],
+                    anno=anno,
+                    mese=mese,
+                )
+                st.session_state["fogli_generati"][key] = record
+                st.session_state["sheet_warnings"][key] = []
+                last_key = key
+
+            if last_key:
+                st.session_state["foglio_attivo"] = last_key
+
+            base = st.session_state["generation_table"].copy()
+            base.loc[base["ROW_ID"].isin(selected["ROW_ID"].tolist()), "SELEZIONA"] = False
+            st.session_state["generation_table"] = base
+
+            st.success("Generazione fogli completata correttamente.")
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # =========================
+    # TABELLA SEPARATA NUOVI FOGLI / SOSTITUZIONI
+    # =========================
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+    st.markdown('<div class="table-title">NUOVI FOGLI / SOSTITUZIONI</div>', unsafe_allow_html=True)
+
+    step4_table = st.session_state["step4_table"].copy()
+
+    if step4_table.empty:
+        st.info("Nessun nuovo foglio / sostituzione creato nel mese corrente.")
+    else:
+        filtro_step4 = st.text_input(
+            "Filtro semplice nuovi fogli/sostituzioni",
+            placeholder="Nome o PDV",
+            key="filtro_step4_table",
+        )
+
+        if filtro_step4.strip():
+            up = filtro_step4.strip().upper()
+            mask = (
+                step4_table["NOME"].astype(str).str.upper().str.contains(up, na=False)
+                | step4_table["PDV"].astype(str).str.upper().str.contains(up, na=False)
+            )
+            step4_table = step4_table[mask].copy()
+
+        if step4_table.empty:
+            st.info("Nessun risultato trovato nella tabella nuovi fogli / sostituzioni.")
+        else:
+            st.data_editor(
+                step4_table.reset_index(drop=True),
+                hide_index=True,
+                use_container_width=True,
+                num_rows="fixed",
+                disabled=True,
+                column_config={
+                    "ROW_ID": None,
+                    "STATO_FOGLIO": st.column_config.TextColumn("Stato foglio", disabled=True),
+                    "ORIGINE_MASTER": st.column_config.TextColumn("Attività base", disabled=True),
+                    "TIPO_LIBRI": st.column_config.TextColumn("Tipo libri", disabled=True),
+                    "NOME": st.column_config.TextColumn("Nome", disabled=True),
+                    "COD_FISCALE": st.column_config.TextColumn("CF", disabled=True),
+                    "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
+                    "PDV": st.column_config.TextColumn("PDV", disabled=True),
+                    "TELEFONO": st.column_config.TextColumn("Telefono", disabled=True),
+                    "EMAIL": st.column_config.TextColumn("Email", disabled=True),
+                    "NETTO_ORA": st.column_config.NumberColumn("Netto orario", format="%.2f €", disabled=True),
+                    "NETTO_MESE": st.column_config.NumberColumn("Netto mese", format="%.2f €", disabled=True),
+                    "TIPO_CONTRATTO": st.column_config.TextColumn("Tipo contratto", disabled=True),
+                    "SCADENZA_CONTRATTO": st.column_config.TextColumn("Scadenza contratto", disabled=True),
+                    "ATTIVITA_RIGA": st.column_config.TextColumn("Attività", disabled=True),
+                },
+                key="editor_step4_table_finale",
+            )
 
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
