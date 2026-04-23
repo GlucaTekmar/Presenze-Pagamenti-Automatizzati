@@ -3074,11 +3074,14 @@ def step525_zero_selected_days_on_record(record: dict, selected_days: list[int])
         if origine_master == ORIGINE_EDICOLA:
             df.at[idx, "EDICOLA_ORE"] = 0.0
             df.at[idx, "EDICOLA_€"] = 0.0
+            df.at[idx, "EDICOLA_TIPO_ASSENZA"] = ""
         else:
             df.at[idx, "MONDADORI_ORE"] = 0.0
             df.at[idx, "MONDADORI_€"] = 0.0
+            df.at[idx, "MONDADORI_TIPO_ASSENZA"] = ""
             df.at[idx, "GIUNTI_ORE"] = 0.0
             df.at[idx, "GIUNTI_€"] = 0.0
+            df.at[idx, "GIUNTI_TIPO_ASSENZA"] = ""
 
     record["tabella"] = df
     update_sheet_totals(record)
@@ -3327,81 +3330,428 @@ def render_generation_page():
 # =========================
 
 def render_page_nuovi_fogli_placeholder():
-    render_page_title("4. Sostituzioni / Azzeramenti")
+    step4_ensure_session_state()
+
+    render_page_title("4. Sostituzioni/Azzeramenti")
     st.markdown('<div class="section-box">', unsafe_allow_html=True)
 
-    st.markdown(
-        """
-        <div class="soft-note">
-            Questa pagina è stata predisposta come contenitore definitivo di:
-            <br>- Nuovo foglio / sostituzione
-            <br>- Azzeramento massivo
-            <br><br>
-            Nel blocco successivo sposteremo qui le funzioni operative reali,
-            senza duplicare la logica e senza lasciare residui nella pagina 2.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.info("Pagina predisposta correttamente. Le funzioni operative verranno agganciate nel prossimo blocco.")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def render_page_chiusura_mese_placeholder():
-    render_page_title("5. Chiusura mese")
-    st.markdown('<div class="section-box">', unsafe_allow_html=True)
-
-    st.markdown(
-        """
-        <div class="soft-note">
-            Questa pagina è stata predisposta come contenitore definitivo della chiusura mese:
-            <br>- Export Excel riepilogo mese
-            <br>- Export PDF fogli presenza
-            <br>- Export PDF / allegati giustificativi
-            <br><br>
-            I tasti reali verranno inseriti nel blocco dedicato allo STEP 6.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.info("Pagina predisposta correttamente. Gli export verranno agganciati più avanti.")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def main():
-    ensure_session_state()
-    inject_global_css()
-    render_header()
-
-    with st.sidebar:
-        st.markdown('<div class="sidebar-logo-wrap">', unsafe_allow_html=True)
-        st.image(LOGO_URL, width=170)
+    if not st.session_state.get("master_loaded", False):
+        st.warning("Prima carica e verifica i master nella sezione 'Origine dati'.")
         st.markdown("</div>", unsafe_allow_html=True)
+        return
 
-        sezione = st.radio(
-            "Sezioni operative",
+    anno = int(st.session_state.get("anno_step3", date.today().year))
+    mese = int(st.session_state.get("mese_step3", date.today().month))
+
+    def append_step4_record_to_generation_table(record: dict):
+        base_table = st.session_state.get("generation_table", pd.DataFrame()).copy()
+
+        if not base_table.empty and "ROW_ID" in base_table.columns:
+            if record["row_id"] in base_table["ROW_ID"].astype(str).tolist():
+                return
+
+        nuova_riga = pd.DataFrame(
             [
-                "Origine dati",
-                "Generazione fogli",
-                "Fogli presenza",
-                "Sostituzioni / Azzeramenti",
-                "Chiusura mese",
-            ],
-            key="main_navigation_radio",
+                {
+                    "SELEZIONA": False,
+                    "ROW_ID": record["row_id"],
+                    "ORIGINE_MASTER": "FOGLIO/SOSTITUZ.",
+                    "TIPO_LIBRI": normalize_text(record.get("tipo_libri", "")),
+                    "NOME": normalize_text(record.get("nome", "")),
+                    "COD_FISCALE": normalize_text(record.get("cf", "")),
+                    "SOCIETA": normalize_text(record.get("societa", "")),
+                    "PDV": normalize_text(record.get("pdv", "")),
+                    "TELEFONO": normalize_text(record.get("telefono", "")),
+                    "EMAIL": normalize_text(record.get("email", "")),
+                    "NETTO_ORA": round(safe_float(record.get("netto_ora", 0.0)), 2),
+                    "NETTO_MESE": round(safe_float(record.get("netto_mese", 0.0)), 2),
+                    "TIPO_CONTRATTO": normalize_text(record.get("tipo_contratto", "")),
+                    "SCADENZA_CONTRATTO": normalize_text(record.get("scadenza_contratto", "")),
+                    "ATTIVITA_RIGA": normalize_text(record.get("attivita_riga", "")),
+                    "MASTER_INDEX": -1,
+                }
+            ]
         )
 
-    if sezione == "Origine dati":
-        render_master_page()
-    elif sezione == "Generazione fogli":
-        render_generation_page()
-    elif sezione == "Fogli presenza":
-        render_sheet_page()
-    elif sezione == "Sostituzioni / Azzeramenti":
-        render_page_nuovi_fogli_placeholder()
-    elif sezione == "Chiusura mese":
-        render_page_chiusura_mese_placeholder()
+        if base_table.empty:
+            st.session_state["generation_table"] = nuova_riga
+        else:
+            st.session_state["generation_table"] = pd.concat([base_table, nuova_riga], ignore_index=True)
 
+    societa_options = step4_get_societa_options()
 
-main()
+    # =========================
+    # BLOCCO STEP 4
+    # =========================
+    st.markdown('<div class="step4-action-box">', unsafe_allow_html=True)
+    st.markdown('<div class="step4-action-title">NUOVO FOGLIO PRESENZA / SOSTITUZIONE</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="step4-action-subtitle">Crea un foglio nuovo fuori dal flusso standard del master</div>',
+        unsafe_allow_html=True,
+    )
+
+    if not societa_options:
+        st.error("Nessuna società disponibile nei master caricati.")
+        st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            step4_modalita = st.selectbox(
+                "Cosa vuoi fare",
+                ["Sostituzione con titolare", "Sostituzione con sostituto spot", "Foglio presenza vuoto"],
+                key="step4_modalita",
+            )
+        with col_s2:
+            step4_societa = st.selectbox("Società", societa_options, key="step4_societa")
+
+        col_s3, col_s4 = st.columns(2)
+        with col_s3:
+            step4_attivita = st.selectbox("Attività", [ORIGINE_EDICOLA, ORIGINE_LIBRI], key="step4_attivita")
+        with col_s4:
+            step4_tipo_giorno = st.selectbox(
+                "Giorno singolo oppure periodo",
+                ["Giorno singolo", "Periodo"],
+                key="step4_tipo_giorno",
+            )
+
+        giorni_mese = calendar.monthrange(anno, mese)[1]
+        primo_giorno = date(anno, mese, 1)
+        ultimo_giorno = date(anno, mese, giorni_mese)
+
+        giorno_singolo_value = None
+        periodo_value = None
+
+        if step4_tipo_giorno == "Giorno singolo":
+            giorno_singolo_value = st.date_input(
+                "Giorno singolo",
+                value=primo_giorno,
+                min_value=primo_giorno,
+                max_value=ultimo_giorno,
+                key="step4_giorno_singolo_cal",
+            )
+        else:
+            periodo_value = st.date_input(
+                "Periodo",
+                value=(primo_giorno, primo_giorno),
+                min_value=primo_giorno,
+                max_value=ultimo_giorno,
+                key="step4_periodo_value",
+            )
+
+        selected_days = step4_get_selected_days(
+            anno=anno,
+            mese=mese,
+            modo=step4_tipo_giorno,
+            giorno_singolo_value=giorno_singolo_value,
+            periodo_value=periodo_value,
+        )
+
+        dipendenti_table = pd.DataFrame()
+        pdv_table = pd.DataFrame()
+
+        if normalize_upper(step4_modalita) != "FOGLIO PRESENZA VUOTO":
+            dipendenti_table = step4_build_dipendenti_table(step4_societa, step4_attivita, step4_modalita)
+            pdv_table = step4_build_pdv_table(step4_societa, step4_attivita)
+
+            st.markdown('<div class="step4-legend-box">', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="step4-help"><b>Selezione guidata:</b> puoi selezionare una sola riga per tabella.</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            filtro_dip = st.text_input(
+                "Filtro tabella dipendenti",
+                placeholder="Nome / cognome",
+                key="step4_filtro_dip",
+            )
+            filtro_pdv = st.text_input(
+                "Filtro tabella punto vendita",
+                placeholder="Città / pdv",
+                key="step4_filtro_pdv",
+            )
+
+            if filtro_dip.strip() and not dipendenti_table.empty:
+                mask_dip = dipendenti_table["NOMINATIVO"].astype(str).str.upper().str.contains(
+                    filtro_dip.strip().upper(),
+                    na=False,
+                )
+                dipendenti_table = dipendenti_table[mask_dip].copy()
+
+            if filtro_pdv.strip() and not pdv_table.empty:
+                mask_pdv = pdv_table["PUNTO_VENDITA"].astype(str).str.upper().str.contains(
+                    filtro_pdv.strip().upper(),
+                    na=False,
+                )
+                pdv_table = pdv_table[mask_pdv].copy()
+
+            st.markdown('<div class="separator-help"><b>Tabella dipendenti</b></div>', unsafe_allow_html=True)
+            if dipendenti_table.empty:
+                st.info("Nessun dato disponibile nella tabella dipendenti.")
+            else:
+                dipendenti_table = st.data_editor(
+                    dipendenti_table,
+                    hide_index=True,
+                    use_container_width=True,
+                    num_rows="fixed",
+                    column_config={
+                        "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
+                        "SOURCE_ID": None,
+                        "TEL": None,
+                        "MAIL": None,
+                        "NOMINATIVO": st.column_config.TextColumn("Nominativo", disabled=True),
+                        "CODICE_FISCALE": st.column_config.TextColumn("Codice Fiscale", disabled=True),
+                        "TIPO_CONTRATTO": st.column_config.TextColumn("Tipo contratto", disabled=True),
+                        "SCADENZA_CONTRATTO": st.column_config.TextColumn("Scadenza contratto", disabled=True),
+                        "NETTO_ORA": st.column_config.NumberColumn("Netto orario", format="%.2f", disabled=True),
+                    },
+                    key="step4_table_dipendenti_page4",
+                )
+
+            st.markdown('<div class="separator-help"><b>Tabella punto vendita</b></div>', unsafe_allow_html=True)
+            if pdv_table.empty:
+                st.info("Nessun dato disponibile nella tabella punto vendita.")
+            else:
+                pdv_table = st.data_editor(
+                    pdv_table,
+                    hide_index=True,
+                    use_container_width=True,
+                    num_rows="fixed",
+                    column_config={
+                        "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
+                        "SOURCE_ID": None,
+                        "TIPO_ATTIVITA": st.column_config.TextColumn("Tipo attività", disabled=True),
+                        "PUNTO_VENDITA": st.column_config.TextColumn("Punto vendita", disabled=True),
+                        "LUNEDI": st.column_config.NumberColumn("Lunedì", format="%.2f", disabled=True),
+                        "MARTEDI": st.column_config.NumberColumn("Martedì", format="%.2f", disabled=True),
+                        "MERCOLEDI": st.column_config.NumberColumn("Mercoledì", format="%.2f", disabled=True),
+                        "GIOVEDI": st.column_config.NumberColumn("Giovedì", format="%.2f", disabled=True),
+                        "VENERDI": st.column_config.NumberColumn("Venerdì", format="%.2f", disabled=True),
+                        "SABATO": st.column_config.NumberColumn("Sabato", format="%.2f", disabled=True),
+                        "DOMENICA": st.column_config.NumberColumn("Domenica", format="%.2f", disabled=True),
+                        "MON_LUN": None,
+                        "MON_MAR": None,
+                        "MON_MER": None,
+                        "MON_GIO": None,
+                        "MON_VEN": None,
+                        "MON_SAB": None,
+                        "MON_DOM": None,
+                        "GIU_LUN": None,
+                        "GIU_MAR": None,
+                        "GIU_MER": None,
+                        "GIU_GIO": None,
+                        "GIU_VEN": None,
+                        "GIU_SAB": None,
+                        "GIU_DOM": None,
+                    },
+                    key="step4_table_pdv_page4",
+                )
+
+        if st.button(
+            "NUOVO FOGLIO PRESENZA / SOSTITUZIONE",
+            type="primary",
+            use_container_width=True,
+            key="btn_step4_generate_page4",
+        ):
+            if not selected_days:
+                st.error("Giorno o periodo non valido per il mese selezionato.")
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+                return
+
+            if normalize_upper(step4_modalita) == "FOGLIO PRESENZA VUOTO":
+                record = step4_create_record(step4_modalita, step4_societa, step4_attivita, anno, mese, selected_days)
+                update_sheet_totals(record)
+                record["netto_mese"] = round(safe_float(record.get("tot_attivita", 0.0)), 2)
+
+                key = format_sheet_key(record["row_id"], anno, mese)
+                st.session_state["fogli_generati"][key] = record
+                append_step4_record_to_generation_table(record)
+                st.session_state["foglio_attivo"] = key
+                st.session_state["sheet_warnings"][key] = []
+                st.session_state["step4_last_created_key"] = key
+                st.success("Nuovo foglio presenza vuoto creato correttamente.")
+                st.rerun()
+            else:
+                dip_row, dip_count = step4_get_single_selected_row(
+                    dipendenti_table if not dipendenti_table.empty else pd.DataFrame()
+                )
+                pdv_row, pdv_count = step4_get_single_selected_row(
+                    pdv_table if not pdv_table.empty else pd.DataFrame()
+                )
+
+                if dip_count > 1 or pdv_count > 1:
+                    st.error("Selezionare una sola riga per ogni tabella.")
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    return
+
+                if dip_count == 0 and pdv_count == 0:
+                    st.error("Selezionare almeno una riga dalle tabelle di scelta.")
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    return
+
+                record = step4_create_record(step4_modalita, step4_societa, step4_attivita, anno, mese, selected_days)
+                step4_apply_selected_rows_to_record(record, dip_row, pdv_row)
+                update_sheet_totals(record)
+                record["netto_mese"] = round(safe_float(record.get("tot_attivita", 0.0)), 2)
+
+                key = format_sheet_key(record["row_id"], anno, mese)
+                st.session_state["fogli_generati"][key] = record
+                append_step4_record_to_generation_table(record)
+                st.session_state["foglio_attivo"] = key
+                st.session_state["sheet_warnings"][key] = []
+                st.session_state["step4_last_created_key"] = key
+                st.success("Nuovo foglio presenza / sostituzione creato correttamente.")
+                st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # =========================
+    # BLOCCO STEP 5,25
+    # =========================
+    if societa_options:
+        st.markdown('<div class="section-box">', unsafe_allow_html=True)
+        st.markdown('<div class="step4-action-box">', unsafe_allow_html=True)
+        st.markdown('<div class="step4-action-title">AZZERAMENTO MASSIVO</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="step4-action-subtitle">Azzera le ore di più fogli presenza insieme senza aprirli uno per uno</div>',
+            unsafe_allow_html=True,
+        )
+
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            step525_societa = st.selectbox("Società", societa_options, key="step525_societa_page4")
+        with col_m2:
+            step525_attivita = st.selectbox("Attività", [ORIGINE_EDICOLA, ORIGINE_LIBRI], key="step525_attivita_page4")
+
+        col_m3, col_m4 = st.columns(2)
+        with col_m3:
+            step525_tipo_giorno = st.selectbox(
+                "Giorno singolo oppure periodo",
+                ["Giorno singolo", "Periodo"],
+                key="step525_tipo_giorno_page4",
+            )
+        with col_m4:
+            primo_giorno = date(anno, mese, 1)
+            ultimo_giorno = date(anno, mese, calendar.monthrange(anno, mese)[1])
+
+            giorno_singolo_value = None
+            periodo_value = None
+
+            if step525_tipo_giorno == "Giorno singolo":
+                giorno_singolo_value = st.date_input(
+                    "Giorno singolo",
+                    value=primo_giorno,
+                    min_value=primo_giorno,
+                    max_value=ultimo_giorno,
+                    key="step525_giorno_singolo_page4",
+                )
+            else:
+                periodo_value = st.date_input(
+                    "Periodo",
+                    value=(primo_giorno, primo_giorno),
+                    min_value=primo_giorno,
+                    max_value=ultimo_giorno,
+                    key="step525_periodo_page4",
+                )
+
+        selected_days_massive = step525_get_selected_days(
+            anno=anno,
+            mese=mese,
+            modo=step525_tipo_giorno,
+            giorno_singolo_value=giorno_singolo_value,
+            periodo_value=periodo_value,
+        )
+
+        filtro_nome_massive = st.text_input(
+            "Filtro tabella azzeramento massivo",
+            placeholder="Nome / cognome / pdv",
+            key="step525_filtro_page4",
+        )
+
+        massive_table = step525_build_massive_table(
+            anno=anno,
+            mese=mese,
+            societa=step525_societa,
+            attivita=step525_attivita,
+        )
+
+        if filtro_nome_massive.strip() and not massive_table.empty:
+            filtro_up = filtro_nome_massive.strip().upper()
+            mask = (
+                massive_table["NOMINATIVO_DIPENDENTE"].astype(str).str.upper().str.contains(filtro_up, na=False)
+                | massive_table["PDV"].astype(str).str.upper().str.contains(filtro_up, na=False)
+            )
+            massive_table = massive_table[mask].copy()
+
+        st.markdown('<div class="separator-help"><b>Seleziona i fogli presenza da azzerare</b></div>', unsafe_allow_html=True)
+
+        if massive_table.empty:
+            st.info("Nessun foglio presenza coerente trovato per i criteri selezionati.")
+        else:
+            edited_massive = st.data_editor(
+                massive_table,
+                hide_index=True,
+                use_container_width=True,
+                num_rows="fixed",
+                column_config={
+                    "SELEZIONA": st.column_config.CheckboxColumn("Seleziona"),
+                    "FOGLIO_KEY": None,
+                    "NOMINATIVO_DIPENDENTE": st.column_config.TextColumn("Nominativo dipendente", disabled=True),
+                    "PDV": st.column_config.TextColumn("PDV", disabled=True),
+                    "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
+                    "TIPO_ATTIVITA": st.column_config.TextColumn("Tipo attività", disabled=True),
+                },
+                key="step525_massive_table_page4",
+            )
+
+            selected_rows = edited_massive[edited_massive["SELEZIONA"] == True].copy()
+            count_selected = len(selected_rows)
+
+            if selected_days_massive and count_selected > 0:
+                st.markdown(
+                    f"""
+                    <div class="soft-note">
+                        <b>Conferma operativa</b><br>
+                        Fogli selezionati: {count_selected}<br>
+                        Intervallo da azzerare: {step525_days_text(selected_days_massive)}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            if st.button("AZZERA ORE", type="primary", use_container_width=True, key="step525_btn_azzera_page4"):
+                if not selected_days_massive:
+                    st.error("Giorno o periodo non valido per il mese selezionato.")
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    return
+
+                if count_selected == 0:
+                    st.error("Seleziona almeno un foglio presenza dalla tabella.")
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    return
+
+                modificati = 0
+
+                for _, row in selected_rows.iterrows():
+                    foglio_key = row["FOGLIO_KEY"]
+                    if foglio_key not in st.session_state["fogli_generati"]:
+                        continue
+
+                    record = st.session_state["fogli_generati"][foglio_key]
+                    step525_zero_selected_days_on_record(record, selected_days_massive)
+                    modificati += 1
+
+                st.success(f"Azzeramento massivo completato. Fogli aggiornati: {modificati}.")
+                st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
