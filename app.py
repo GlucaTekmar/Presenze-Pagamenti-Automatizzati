@@ -715,6 +715,7 @@ def calculate_sheet_stats(df: pd.DataFrame, origine_master: str, netto_ora: floa
     if origine_master == ORIGINE_EDICOLA:
         current_hours = df["EDICOLA_ORE"].apply(safe_float)
         base_hours = df["BASE_EDICOLA_ORE"].apply(safe_float)
+
         current_euro_series = df["EDICOLA_€"].apply(safe_float)
         base_euro_series = df.apply(
             lambda row: calculate_row_amount(
@@ -728,6 +729,7 @@ def calculate_sheet_stats(df: pd.DataFrame, origine_master: str, netto_ora: floa
     else:
         current_hours = df["MONDADORI_ORE"].apply(safe_float) + df["GIUNTI_ORE"].apply(safe_float)
         base_hours = df["BASE_MONDADORI_ORE"].apply(safe_float) + df["BASE_GIUNTI_ORE"].apply(safe_float)
+
         current_euro_series = df["MONDADORI_€"].apply(safe_float) + df["GIUNTI_€"].apply(safe_float)
         base_euro_series = df.apply(
             lambda row: (
@@ -747,20 +749,28 @@ def calculate_sheet_stats(df: pd.DataFrame, origine_master: str, netto_ora: floa
             axis=1,
         )
 
-    giorni_lavorati = int((current_hours > 0).sum())
+    giorni_lavorati_attuali = int((current_hours > 0).sum())
+    giorni_lavorati_base = int((base_hours > 0).sum())
     giorni_modificati = int((df["ROW_STATUS"].astype(str).str.strip() != "").sum())
-    tot_ore = round(current_hours.sum(), 2)
-    tot_ore_azzerate = round((base_hours - current_hours).clip(lower=0).sum(), 2)
-    tot_euro = round(current_euro_series.sum(), 2)
-    riduzioni_euro = round((base_euro_series - current_euro_series).clip(lower=0).sum(), 2)
+
+    tot_ore_attuali = round(current_hours.sum(), 2)
+    tot_ore_base = round(base_hours.sum(), 2)
+    tot_ore_ridotte = round((base_hours - current_hours).clip(lower=0).sum(), 2)
+
+    tot_euro_attuali = round(current_euro_series.sum(), 2)
+    tot_euro_base = round(base_euro_series.sum(), 2)
+    tot_euro_scalati = round((base_euro_series - current_euro_series).clip(lower=0).sum(), 2)
 
     return {
-        "GIORNI_LAVORATI": giorni_lavorati,
+        "GIORNI_LAVORATI_ATTUALI": giorni_lavorati_attuali,
+        "GIORNI_LAVORATI_BASE": giorni_lavorati_base,
         "GIORNI_MODIFICATI": giorni_modificati,
-        "TOT_ORE_LAVORATIVE_MESE": tot_ore,
-        "TOT_ORE_AZZERATE": tot_ore_azzerate,
-        "TOT_€_DA_SCALARE": riduzioni_euro,
-        "TOT_ATTIVITA_€": tot_euro,
+        "TOT_ORE_ATTUALI": tot_ore_attuali,
+        "TOT_ORE_BASE": tot_ore_base,
+        "TOT_ORE_RIDOTTE": tot_ore_ridotte,
+        "TOT_ATTIVITA_ATTUALE_€": tot_euro_attuali,
+        "TOT_ATTIVITA_BASE_€": tot_euro_base,
+        "TOT_€_DA_SCALARE": tot_euro_scalati,
     }
 
 
@@ -801,9 +811,11 @@ def apply_presence_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, 
         if origine_master == ORIGINE_EDICOLA:
             base = safe_float(df.at[idx, "BASE_EDICOLA_ORE"])
             current = safe_float(df.at[idx, "EDICOLA_ORE"])
+
             if not allow_increase and current > base:
                 df.at[idx, "EDICOLA_ORE"] = base
                 warnings.append(f"Giorno {int(df.at[idx, 'GIORNO_NUM'])}: aumento ore non consentito.")
+
             if safe_float(df.at[idx, "EDICOLA_ORE"]) > 0:
                 df.at[idx, "EDICOLA_TIPO_ASSENZA"] = ""
 
@@ -820,6 +832,7 @@ def apply_presence_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, 
                 bool(df.at[idx, "FESTIVO"]),
                 societa,
             )
+
         else:
             base_mon = safe_float(df.at[idx, "BASE_MONDADORI_ORE"])
             base_giu = safe_float(df.at[idx, "BASE_GIUNTI_ORE"])
@@ -827,6 +840,7 @@ def apply_presence_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, 
             if not allow_increase and safe_float(df.at[idx, "MONDADORI_ORE"]) > base_mon:
                 df.at[idx, "MONDADORI_ORE"] = base_mon
                 warnings.append(f"Giorno {int(df.at[idx, 'GIORNO_NUM'])}: aumento ore non consentito.")
+
             if not allow_increase and safe_float(df.at[idx, "GIUNTI_ORE"]) > base_giu:
                 df.at[idx, "GIUNTI_ORE"] = base_giu
                 warnings.append(f"Giorno {int(df.at[idx, 'GIORNO_NUM'])}: aumento ore non consentito.")
@@ -860,36 +874,81 @@ def apply_presence_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, 
 
     if warnings:
         warnings = list(dict.fromkeys(warnings))
+
     return df, warnings
 
 
 def update_sheet_totals(record: dict):
     allow_increase = bool(record.get("allow_increase", False))
+    origine_master = normalize_upper(record["origine_master"])
+
+    # SOLO per foglio vuoto STEP 4:
+    # quando inserisco nuove ore, quelle ore diventano la nuova BASE del foglio.
+    # Questo permette:
+    # - netto mese fisso dopo valorizzazione
+    # - giorni lavorati base corretti
+    # - ore ridotte/azzerate corrette
+    # - € da scalare corretti
+    if record.get("is_step4", False) and record.get("netto_mese_dynamic", False):
+        df_base = record["tabella"].copy()
+
+        if origine_master == ORIGINE_EDICOLA:
+            for idx in df_base.index:
+                current = safe_float(df_base.at[idx, "EDICOLA_ORE"])
+                base = safe_float(df_base.at[idx, "BASE_EDICOLA_ORE"])
+                if current > base:
+                    df_base.at[idx, "BASE_EDICOLA_ORE"] = current
+        else:
+            for idx in df_base.index:
+                current_mon = safe_float(df_base.at[idx, "MONDADORI_ORE"])
+                base_mon = safe_float(df_base.at[idx, "BASE_MONDADORI_ORE"])
+                if current_mon > base_mon:
+                    df_base.at[idx, "BASE_MONDADORI_ORE"] = current_mon
+
+                current_giu = safe_float(df_base.at[idx, "GIUNTI_ORE"])
+                base_giu = safe_float(df_base.at[idx, "BASE_GIUNTI_ORE"])
+                if current_giu > base_giu:
+                    df_base.at[idx, "BASE_GIUNTI_ORE"] = current_giu
+
+        record["tabella"] = df_base
+
     record["tabella"], warnings = apply_presence_rules(
         tabella=record["tabella"],
         netto_ora=record["netto_ora"],
         societa=record["societa"],
-        origine_master=normalize_upper(record["origine_master"]),
+        origine_master=origine_master,
         allow_increase=allow_increase,
     )
 
     stats = calculate_sheet_stats(
         df=record["tabella"],
-        origine_master=normalize_upper(record["origine_master"]),
+        origine_master=origine_master,
         netto_ora=record["netto_ora"],
         societa=record["societa"],
     )
 
-    record["giorni_lavorati"] = stats["GIORNI_LAVORATI"]
-    record["giorni_modificati"] = stats["GIORNI_MODIFICATI"]
-    record["tot_ore_lavorative_mese"] = stats["TOT_ORE_LAVORATIVE_MESE"]
-    record["tot_ore_azzerate"] = stats["TOT_ORE_AZZERATE"]
-    record["tot_euro_da_scalare"] = stats["TOT_€_DA_SCALARE"]
-    record["tot_attivita"] = stats["TOT_ATTIVITA_€"]
-
     if record.get("is_step4", False) and record.get("netto_mese_dynamic", False):
-        record["netto_mese"] = round(safe_float(record["tot_attivita"]), 2)
+        # FOGLIO VUOTO:
+        # - giorni lavorati = base storica costruita inserendo le ore
+        # - netto mese = base storica € e poi resta fisso
+        record["giorni_lavorati"] = stats["GIORNI_LAVORATI_BASE"]
+        record["netto_mese"] = round(safe_float(stats["TOT_ATTIVITA_BASE_€"]), 2)
+    else:
+        # FOGLI STANDARD / SOSTITUZIONI
+        record["giorni_lavorati"] = stats["GIORNI_LAVORATI_ATTUALI"]
 
+        # Per sostituzioni STEP 4:
+        # appena creato il foglio, netto mese = totale corpo iniziale e poi resta fisso
+        if record.get("is_step4", False) and safe_float(record.get("netto_mese", 0.0)) == 0 and safe_float(stats["TOT_ATTIVITA_BASE_€"]) > 0:
+            record["netto_mese"] = round(safe_float(stats["TOT_ATTIVITA_BASE_€"]), 2)
+
+    record["giorni_modificati"] = stats["GIORNI_MODIFICATI"]
+    record["tot_ore_lavorative_mese"] = stats["TOT_ORE_ATTUALI"]
+    record["tot_ore_azzerate"] = stats["TOT_ORE_RIDOTTE"]
+    record["tot_euro_da_scalare"] = stats["TOT_€_DA_SCALARE"]
+    record["tot_attivita"] = stats["TOT_ATTIVITA_ATTUALE_€"]
+
+    # Totale finale = totale ATTUALE del corpo + fondo foglio
     record["tot_netto_mese"] = round(
         safe_float(record["tot_attivita"])
         + safe_float(record["arretrati"])
@@ -899,6 +958,7 @@ def update_sheet_totals(record: dict):
         + safe_float(record["rimborso"]),
         2,
     )
+
     return warnings
 
 
