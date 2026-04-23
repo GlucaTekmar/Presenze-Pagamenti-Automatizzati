@@ -19,7 +19,7 @@ BG_BOX = "#F7F8FA"
 BG_FIELD = "#FFFFFF"
 BORDER_COLOR = "#97A3AF"
 BORDER_COLOR_STRONG = "#7F8C99"
-TEXT_COLOR = "#1E2A36"
+TEXT_COLOR = "#111111"
 TEXT_MUTED = "#425466"
 
 GIORNI_SETTIMANA = ["LUN", "MAR", "MER", "GIO", "VEN", "SAB", "DOM"]
@@ -255,6 +255,13 @@ def inject_global_css():
                 margin-bottom: 10px;
             }}
 
+            .table-title {{
+                font-size: 1.32rem;
+                font-weight: 800;
+                color: var(--text);
+                margin-bottom: 0.6rem;
+            }}
+
             div[data-baseweb="select"] > div,
             .stTextInput input,
             .stNumberInput input,
@@ -265,6 +272,29 @@ def inject_global_css():
                 background: var(--field-bg) !important;
                 border: 2px solid var(--border-strong) !important;
                 border-radius: 12px !important;
+                color: var(--text) !important;
+                -webkit-text-fill-color: var(--text) !important;
+                opacity: 1 !important;
+            }}
+
+            .stTextInput input:disabled,
+            .stNumberInput input:disabled,
+            .stTextArea textarea:disabled,
+            div[data-baseweb="select"] input:disabled {{
+                color: var(--text) !important;
+                -webkit-text-fill-color: var(--text) !important;
+                opacity: 1 !important;
+            }}
+
+            .stTextInput label p,
+            .stNumberInput label p,
+            .stTextArea label p,
+            .stFileUploader label p,
+            .stSelectbox label p,
+            .stCheckbox label p {{
+                color: var(--text) !important;
+                font-size: 1.06rem !important;
+                font-weight: 800 !important;
             }}
 
             .stButton > button {{
@@ -275,13 +305,6 @@ def inject_global_css():
                 font-size: 1.04rem !important;
                 font-weight: 800 !important;
                 min-height: 46px;
-            }}
-
-            .table-title {{
-                font-size: 1.32rem;
-                font-weight: 800;
-                color: var(--text);
-                margin-bottom: 0.6rem;
             }}
         </style>
         """,
@@ -412,14 +435,12 @@ def get_selected_days(anno: int, mese: int, modo: str, giorno_singolo_value, per
 
     if not periodo_value or len(periodo_value) != 2:
         return []
-
     data_inizio, data_fine = periodo_value
     if not data_inizio or not data_fine or data_inizio > data_fine:
         return []
 
     primo_giorno = date(anno, mese, 1)
     ultimo_giorno = date(anno, mese, calendar.monthrange(anno, mese)[1])
-
     if data_inizio < primo_giorno or data_fine > ultimo_giorno:
         return []
 
@@ -486,7 +507,6 @@ def ensure_session_state():
         "foglio_attivo": None,
         "master_loaded": False,
         "sheet_warnings": {},
-        "deleted_sheet_keys": set(),
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -555,7 +575,6 @@ def build_generation_table(df_edicola: pd.DataFrame, df_libri: pd.DataFrame) -> 
     result = pd.DataFrame(righe)
     if result.empty:
         return result
-
     return result.sort_values(
         ["ORIGINE_MASTER", "NOME", "SOCIETA", "PDV", "TIPO_LIBRI"]
     ).reset_index(drop=True)
@@ -563,7 +582,6 @@ def build_generation_table(df_edicola: pd.DataFrame, df_libri: pd.DataFrame) -> 
 
 def append_record_to_generation_table(record: dict):
     base_table = st.session_state["generation_table"].copy()
-
     if not base_table.empty and record["row_id"] in base_table["ROW_ID"].astype(str).tolist():
         return
 
@@ -598,7 +616,7 @@ def append_record_to_generation_table(record: dict):
         st.session_state["generation_table"] = pd.concat([base_table, nuova], ignore_index=True)
 
 # =========================
-# COSTRUZIONE FOGLIO
+# COSTRUZIONE / CALCOLI FOGLI
 # =========================
 
 def build_presence_dataframe_from_master_row(
@@ -772,7 +790,7 @@ def get_row_status(row: pd.Series, origine_master: str) -> str:
     return ""
 
 
-def apply_presence_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, origine_master: str) -> tuple[pd.DataFrame, list[str]]:
+def apply_presence_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, origine_master: str, allow_increase: bool) -> tuple[pd.DataFrame, list[str]]:
     df = tabella.copy()
     warnings = []
 
@@ -780,21 +798,22 @@ def apply_presence_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, 
         df[col] = df[col].apply(safe_float)
 
     for idx in df.index:
-        # no increases ever
         if origine_master == ORIGINE_EDICOLA:
             base = safe_float(df.at[idx, "BASE_EDICOLA_ORE"])
             current = safe_float(df.at[idx, "EDICOLA_ORE"])
-            if current > base:
+            if not allow_increase and current > base:
                 df.at[idx, "EDICOLA_ORE"] = base
                 warnings.append(f"Giorno {int(df.at[idx, 'GIORNO_NUM'])}: aumento ore non consentito.")
             if safe_float(df.at[idx, "EDICOLA_ORE"]) > 0:
                 df.at[idx, "EDICOLA_TIPO_ASSENZA"] = ""
+
             df.at[idx, "MONDADORI_ORE"] = 0.0
             df.at[idx, "MONDADORI_€"] = 0.0
             df.at[idx, "MONDADORI_TIPO_ASSENZA"] = ""
             df.at[idx, "GIUNTI_ORE"] = 0.0
             df.at[idx, "GIUNTI_€"] = 0.0
             df.at[idx, "GIUNTI_TIPO_ASSENZA"] = ""
+
             df.at[idx, "EDICOLA_€"] = calculate_row_amount(
                 safe_float(df.at[idx, "EDICOLA_ORE"]),
                 netto_ora,
@@ -805,10 +824,10 @@ def apply_presence_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, 
             base_mon = safe_float(df.at[idx, "BASE_MONDADORI_ORE"])
             base_giu = safe_float(df.at[idx, "BASE_GIUNTI_ORE"])
 
-            if safe_float(df.at[idx, "MONDADORI_ORE"]) > base_mon:
+            if not allow_increase and safe_float(df.at[idx, "MONDADORI_ORE"]) > base_mon:
                 df.at[idx, "MONDADORI_ORE"] = base_mon
                 warnings.append(f"Giorno {int(df.at[idx, 'GIORNO_NUM'])}: aumento ore non consentito.")
-            if safe_float(df.at[idx, "GIUNTI_ORE"]) > base_giu:
+            if not allow_increase and safe_float(df.at[idx, "GIUNTI_ORE"]) > base_giu:
                 df.at[idx, "GIUNTI_ORE"] = base_giu
                 warnings.append(f"Giorno {int(df.at[idx, 'GIORNO_NUM'])}: aumento ore non consentito.")
 
@@ -837,10 +856,7 @@ def apply_presence_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, 
         df.at[idx, "ROW_STATUS"] = get_row_status(df.loc[idx], origine_master)
         base_data = normalize_text(df.at[idx, "DATA"])
         status = df.at[idx, "ROW_STATUS"]
-        if status:
-            df.at[idx, "DATA_VIEW"] = f"{status} {base_data}"
-        else:
-            df.at[idx, "DATA_VIEW"] = base_data
+        df.at[idx, "DATA_VIEW"] = f"{status} {base_data}" if status else base_data
 
     if warnings:
         warnings = list(dict.fromkeys(warnings))
@@ -848,11 +864,13 @@ def apply_presence_rules(tabella: pd.DataFrame, netto_ora: float, societa: str, 
 
 
 def update_sheet_totals(record: dict):
+    allow_increase = bool(record.get("allow_increase", False))
     record["tabella"], warnings = apply_presence_rules(
         tabella=record["tabella"],
         netto_ora=record["netto_ora"],
         societa=record["societa"],
         origine_master=normalize_upper(record["origine_master"]),
+        allow_increase=allow_increase,
     )
 
     stats = calculate_sheet_stats(
@@ -869,15 +887,11 @@ def update_sheet_totals(record: dict):
     record["tot_euro_da_scalare"] = stats["TOT_€_DA_SCALARE"]
     record["tot_attivita"] = stats["TOT_ATTIVITA_€"]
 
-    if record.get("is_step4", False):
-        if not record.get("netto_mese_bloccato", False):
-            record["netto_mese"] = round(safe_float(record["tot_attivita"]), 2)
-            if safe_float(record["netto_mese"]) > 0:
-                record["netto_mese_bloccato"] = True
+    if record.get("is_step4", False) and record.get("netto_mese_dynamic", False):
+        record["netto_mese"] = round(safe_float(record["tot_attivita"]), 2)
 
     record["tot_netto_mese"] = round(
         safe_float(record["tot_attivita"])
-        - safe_float(record["tot_euro_da_scalare"])
         + safe_float(record["arretrati"])
         + safe_float(record["extra"])
         + safe_float(record["affiancamenti"])
@@ -960,14 +974,20 @@ def init_sheet_record_from_master(
         "tot_attivita": 0.0,
         "tot_netto_mese": 0.0,
         "is_step4": False,
-        "netto_mese_bloccato": True,
+        "allow_increase": False,
+        "netto_mese_dynamic": False,
     }
     update_sheet_totals(record)
+
+    if normalize_upper(record["origine_master"]) == ORIGINE_LIBRI and safe_float(record["netto_mese"]) == 0:
+        record["netto_mese"] = round(safe_float(record["tot_attivita"]), 2)
+
     return record
 
 
 def base_step4_record(modalita: str, societa: str, attivita: str, anno: int, mese: int, selected_days: list[int]) -> dict:
     row_id = f"STEP4_{anno}_{mese:02d}_{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+    is_empty = normalize_upper(modalita) == "FOGLIO PRESENZA VUOTO"
     return {
         "row_id": row_id,
         "origine_master": attivita,
@@ -1005,7 +1025,8 @@ def base_step4_record(modalita: str, societa: str, attivita: str, anno: int, mes
         "is_step4": True,
         "step4_modalita": normalize_text(modalita),
         "step4_selected_days": list(selected_days),
-        "netto_mese_bloccato": False,
+        "allow_increase": is_empty,          # foglio vuoto compilabile
+        "netto_mese_dynamic": is_empty,      # foglio vuoto: netto mese segue il corpo
     }
 
 # =========================
@@ -1237,7 +1258,6 @@ def render_master_page():
             st.session_state["df_libri"],
         )
         st.session_state["fogli_generati"] = {}
-        st.session_state["deleted_sheet_keys"] = set()
         st.session_state["master_loaded"] = True
         st.success("Master verificati e caricati correttamente.")
         st.rerun()
@@ -1774,7 +1794,6 @@ def render_sheet_page():
         st.session_state["foglio_attivo"] = keys[0]
 
     filtro = st.text_input("Filtro semplice fogli (nome o PDV)", placeholder="Nome o PDV", key="filtro_fogli_presenza")
-
     filtered_keys = keys
     if filtro.strip():
         up = filtro.strip().upper()
@@ -1818,12 +1837,15 @@ def render_sheet_page():
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.text_input("Società", value=record["societa"], disabled=True, key=f"societa_{selected_key}")
+        record["societa"] = st.text_input("Società", value=record["societa"], disabled=locked, key=f"societa_{selected_key}")
         st.text_input("Attività", value=record["attivita_riga"], disabled=True, key=f"attivita_{selected_key}")
-        st.text_input("Nome", value=record["nome"], disabled=True, key=f"nome_{selected_key}")
+        nome_disabled = locked if record.get("step4_modalita", "") == "Foglio presenza vuoto" else True
+        record["nome"] = st.text_input("Nome", value=record["nome"], disabled=nome_disabled, key=f"nome_{selected_key}")
     with c2:
-        st.text_input("CF", value=record["cf"], disabled=True, key=f"cf_{selected_key}")
-        st.text_input("PDV", value=record["pdv"], disabled=True, key=f"pdv_{selected_key}")
+        cf_disabled = locked if record.get("step4_modalita", "") == "Foglio presenza vuoto" else True
+        pdv_disabled = locked if record.get("step4_modalita", "") == "Foglio presenza vuoto" else True
+        record["cf"] = st.text_input("CF", value=record["cf"], disabled=cf_disabled, key=f"cf_{selected_key}")
+        record["pdv"] = st.text_input("PDV", value=record["pdv"], disabled=pdv_disabled, key=f"pdv_{selected_key}")
         st.text_input("Mese", value=f"{MESI[record['mese']]} {record['anno']}", disabled=True, key=f"mese_{selected_key}")
     with c3:
         record["tipo_contratto"] = st.text_input("Tipo contratto", value=record["tipo_contratto"], disabled=locked, key=f"tipo_contratto_{selected_key}")
@@ -1995,7 +2017,7 @@ def render_sheet_page():
             """
             <div class="soft-note">
                 <b>Formula finale</b><br>
-                TOT NETTO MESE = Totale attività corpo foglio - Tot € da scalare + Arretrati + Extra + Affiancamenti + Domeniche + Rimborsi
+                TOT NETTO MESE = Totale attività corpo foglio + Arretrati + Extra + Affiancamenti + Domeniche + Rimborsi
             </div>
             """,
             unsafe_allow_html=True,
