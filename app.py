@@ -2506,32 +2506,29 @@ def update_sheet_totals(record: dict):
     record["tot_euro_da_scalare"] = stats["TOT_€_DA_SCALARE"]
     record["tot_attivita"] = stats["TOT_ATTIVITA_€"]
 
+    # NETTO MESE:
+    # - fogli standard: resta il valore già valorizzato dal master
+    # - fogli STEP 4: resta fisso dopo la prima valorizzazione utile del corpo foglio
     if record.get("is_step4", False):
-        if not record.get("netto_mese_bloccato", False):
-            if round(stats["TOT_ATTIVITA_€"], 2) > 0:
-                record["netto_mese"] = round(stats["TOT_ATTIVITA_€"], 2)
-                record["netto_mese_bloccato"] = True
+        current_netto_mese = round(safe_float(record.get("netto_mese", 0.0)), 2)
+        current_tot_attivita = round(safe_float(stats["TOT_ATTIVITA_€"]), 2)
 
-        record["tot_netto_mese"] = round(
-            safe_float(record["netto_mese"])
-            - safe_float(record["tot_euro_da_scalare"])
-            + safe_float(record["arretrati"])
-            + safe_float(record["extra"])
-            + safe_float(record["affiancamenti"])
-            + safe_float(record["domeniche"])
-            + safe_float(record["rimborso"]),
-            2,
-        )
-    else:
-        record["tot_netto_mese"] = round(
-            safe_float(record["tot_attivita"])
-            + safe_float(record["arretrati"])
-            + safe_float(record["extra"])
-            + safe_float(record["affiancamenti"])
-            + safe_float(record["domeniche"])
-            + safe_float(record["rimborso"]),
-            2,
-        )
+        if current_netto_mese <= 0 and current_tot_attivita > 0:
+            record["netto_mese"] = current_tot_attivita
+
+    # TOT NETTO MESE:
+    # formula unica blindata per TUTTI i fogli
+    # totale attività corpo foglio - tot € da scalare + fondo foglio
+    record["tot_netto_mese"] = round(
+        safe_float(record["tot_attivita"])
+        - safe_float(record["tot_euro_da_scalare"])
+        + safe_float(record["arretrati"])
+        + safe_float(record["extra"])
+        + safe_float(record["affiancamenti"])
+        + safe_float(record["domeniche"])
+        + safe_float(record["rimborso"]),
+        2,
+    )
 
 
 def clear_entire_sheet(record: dict):
