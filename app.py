@@ -581,58 +581,11 @@ def build_generation_table(df_edicola: pd.DataFrame, df_libri: pd.DataFrame) -> 
 
 
 def append_record_to_generation_table(record: dict):
-    if "step4_table" not in st.session_state:
-        st.session_state["step4_table"] = pd.DataFrame(
-            columns=[
-                "ROW_ID",
-                "STATO_FOGLIO",
-                "ORIGINE_MASTER",
-                "TIPO_LIBRI",
-                "NOME",
-                "COD_FISCALE",
-                "SOCIETA",
-                "PDV",
-                "TELEFONO",
-                "EMAIL",
-                "NETTO_ORA",
-                "NETTO_MESE",
-                "TIPO_CONTRATTO",
-                "SCADENZA_CONTRATTO",
-                "ATTIVITA_RIGA",
-            ]
-        )
-
-    base_table = st.session_state["step4_table"].copy()
-
-    if not base_table.empty and record["row_id"] in base_table["ROW_ID"].astype(str).tolist():
-        return
-
-    nuova = pd.DataFrame(
-        [
-            {
-                "ROW_ID": record["row_id"],
-                "STATO_FOGLIO": "CREATO",
-                "ORIGINE_MASTER": record["origine_master"],
-                "TIPO_LIBRI": normalize_text(record.get("tipo_libri", "")),
-                "NOME": normalize_text(record.get("nome", "")),
-                "COD_FISCALE": normalize_text(record.get("cf", "")),
-                "SOCIETA": normalize_text(record.get("societa", "")),
-                "PDV": normalize_text(record.get("pdv", "")),
-                "TELEFONO": normalize_text(record.get("telefono", "")),
-                "EMAIL": normalize_text(record.get("email", "")),
-                "NETTO_ORA": round(safe_float(record.get("netto_ora", 0.0)), 2),
-                "NETTO_MESE": round(safe_float(record.get("netto_mese", 0.0)), 2),
-                "TIPO_CONTRATTO": normalize_text(record.get("tipo_contratto", "")),
-                "SCADENZA_CONTRATTO": normalize_text(record.get("scadenza_contratto", "")),
-                "ATTIVITA_RIGA": normalize_text(record.get("attivita_riga", "")),
-            }
-        ]
-    )
-
-    if base_table.empty:
-        st.session_state["step4_table"] = nuova
-    else:
-        st.session_state["step4_table"] = pd.concat([base_table, nuova], ignore_index=True)
+    # I fogli creati da Nuovo foglio / Sostituzione
+    # non devono più finire nella tabella principale.
+    # La tabella dedicata verrà costruita leggendo direttamente
+    # i fogli presenti in st.session_state["fogli_generati"].
+    return
 
 # =========================
 # COSTRUZIONE / CALCOLI FOGLI
