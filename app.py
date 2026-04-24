@@ -581,11 +581,58 @@ def build_generation_table(df_edicola: pd.DataFrame, df_libri: pd.DataFrame) -> 
 
 
 def append_record_to_generation_table(record: dict):
-    # I fogli creati da Nuovo foglio / Sostituzione
-    # non devono più finire nella tabella principale.
-    # La tabella dedicata verrà costruita leggendo direttamente
-    # i fogli presenti in st.session_state["fogli_generati"].
-    return
+    if "step4_table" not in st.session_state:
+        st.session_state["step4_table"] = pd.DataFrame(
+            columns=[
+                "ROW_ID",
+                "STATO_FOGLIO",
+                "ORIGINE_MASTER",
+                "TIPO_LIBRI",
+                "NOME",
+                "COD_FISCALE",
+                "SOCIETA",
+                "PDV",
+                "TELEFONO",
+                "EMAIL",
+                "NETTO_ORA",
+                "NETTO_MESE",
+                "TIPO_CONTRATTO",
+                "SCADENZA_CONTRATTO",
+                "ATTIVITA_RIGA",
+            ]
+        )
+
+    base_table = st.session_state["step4_table"].copy()
+
+    if not base_table.empty and record["row_id"] in base_table["ROW_ID"].astype(str).tolist():
+        return
+
+    nuova = pd.DataFrame(
+        [
+            {
+                "ROW_ID": record["row_id"],
+                "STATO_FOGLIO": "CREATO",
+                "ORIGINE_MASTER": record["origine_master"],
+                "TIPO_LIBRI": normalize_text(record.get("tipo_libri", "")),
+                "NOME": normalize_text(record.get("nome", "")),
+                "COD_FISCALE": normalize_text(record.get("cf", "")),
+                "SOCIETA": normalize_text(record.get("societa", "")),
+                "PDV": normalize_text(record.get("pdv", "")),
+                "TELEFONO": normalize_text(record.get("telefono", "")),
+                "EMAIL": normalize_text(record.get("email", "")),
+                "NETTO_ORA": round(safe_float(record.get("netto_ora", 0.0)), 2),
+                "NETTO_MESE": round(safe_float(record.get("netto_mese", 0.0)), 2),
+                "TIPO_CONTRATTO": normalize_text(record.get("tipo_contratto", "")),
+                "SCADENZA_CONTRATTO": normalize_text(record.get("scadenza_contratto", "")),
+                "ATTIVITA_RIGA": normalize_text(record.get("attivita_riga", "")),
+            }
+        ]
+    )
+
+    if base_table.empty:
+        st.session_state["step4_table"] = nuova
+    else:
+        st.session_state["step4_table"] = pd.concat([base_table, nuova], ignore_index=True)
 
 # =========================
 # COSTRUZIONE / CALCOLI FOGLI
@@ -1311,40 +1358,14 @@ def render_master_page():
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-def build_step4_table_from_generated(anno: int, mese: int) -> pd.DataFrame:
-    righe = []
+def render_generation_page():
+    render_page_title("2. Generazione fogli")
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
 
-    for foglio_key, record in st.session_state["fogli_generati"].items():
-        if not bool(record.get("is_step4", False)):
-            continue
-        if int(record.get("anno", 0)) != int(anno) or int(record.get("mese", 0)) != int(mese):
-            continue
-
-        righe.append(
-            {
-                "FOGLIO_KEY": foglio_key,
-                "STATO_FOGLIO": "CREATO",
-                "ORIGINE_MASTER": normalize_text(record.get("origine_master", "")),
-                "TIPO_LIBRI": normalize_text(record.get("tipo_libri", "")),
-                "NOME": normalize_text(record.get("nome", "")),
-                "COD_FISCALE": normalize_text(record.get("cf", "")),
-                "SOCIETA": normalize_text(record.get("societa", "")),
-                "PDV": normalize_text(record.get("pdv", "")),
-                "TELEFONO": normalize_text(record.get("telefono", "")),
-                "EMAIL": normalize_text(record.get("email", "")),
-                "NETTO_ORA": round(safe_float(record.get("netto_ora", 0.0)), 2),
-                "NETTO_MESE": round(safe_float(record.get("netto_mese", 0.0)), 2),
-                "TIPO_CONTRATTO": normalize_text(record.get("tipo_contratto", "")),
-                "SCADENZA_CONTRATTO": normalize_text(record.get("scadenza_contratto", "")),
-                "ATTIVITA_RIGA": normalize_text(record.get("attivita_riga", "")),
-                "MODALITA_STEP4": normalize_text(record.get("step4_modalita", "")),
-            }
-        )
-
-    if not righe:
-        return pd.DataFrame(
+    if "step4_table" not in st.session_state:
+        st.session_state["step4_table"] = pd.DataFrame(
             columns=[
-                "FOGLIO_KEY",
+                "ROW_ID",
                 "STATO_FOGLIO",
                 "ORIGINE_MASTER",
                 "TIPO_LIBRI",
@@ -1359,18 +1380,8 @@ def build_step4_table_from_generated(anno: int, mese: int) -> pd.DataFrame:
                 "TIPO_CONTRATTO",
                 "SCADENZA_CONTRATTO",
                 "ATTIVITA_RIGA",
-                "MODALITA_STEP4",
             ]
         )
-
-    return pd.DataFrame(righe).sort_values(
-        ["SOCIETA", "ATTIVITA_RIGA", "NOME", "PDV"]
-    ).reset_index(drop=True)
-
-
-def render_generation_page():
-    render_page_title("2. Generazione fogli")
-    st.markdown('<div class="section-box">', unsafe_allow_html=True)
 
     if not st.session_state["master_loaded"]:
         st.warning("Prima carica e verifica i master nella sezione 'Origine dati'.")
@@ -1391,10 +1402,6 @@ def render_generation_page():
         st.warning("Nessuna riga disponibile.")
         st.markdown("</div>", unsafe_allow_html=True)
         return
-
-    # Sicurezza: la tabella principale mostra solo righe da master
-    if "IS_STEP4" in full_table.columns:
-        full_table = full_table[full_table["IS_STEP4"] != True].copy()
 
     def is_created(row_id: str) -> bool:
         key = format_sheet_key(normalize_text(row_id), anno, mese)
@@ -1474,9 +1481,6 @@ def render_generation_page():
                 st.rerun()
 
         editor_table = st.session_state["generation_table"].copy()
-        if "IS_STEP4" in editor_table.columns:
-            editor_table = editor_table[editor_table["IS_STEP4"] != True].copy()
-
         editor_table["STATO_FOGLIO"] = editor_table["ROW_ID"].apply(
             lambda rid: "CREATO" if is_created(rid) else "NON CREATO"
         )
@@ -1531,9 +1535,6 @@ def render_generation_page():
                 st.session_state["generation_table"]["SELEZIONA"] == True
             ].copy()
 
-            if "IS_STEP4" in selected.columns:
-                selected = selected[selected["IS_STEP4"] != True].copy()
-
             if selected.empty:
                 st.warning("Seleziona almeno una riga.")
                 st.markdown("</div>", unsafe_allow_html=True)
@@ -1551,6 +1552,9 @@ def render_generation_page():
                 key = format_sheet_key(normalize_text(row["ROW_ID"]), anno, mese)
 
                 if key in st.session_state["fogli_generati"]:
+                    continue
+
+                if bool(row.get("IS_STEP4", False)):
                     continue
 
                 record = init_sheet_record_from_master(
@@ -1582,7 +1586,7 @@ def render_generation_page():
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
     st.markdown('<div class="table-title">NUOVI FOGLI / SOSTITUZIONI</div>', unsafe_allow_html=True)
 
-    step4_table = build_step4_table_from_generated(anno=anno, mese=mese)
+    step4_table = st.session_state["step4_table"].copy()
 
     if step4_table.empty:
         st.info("Nessun nuovo foglio / sostituzione creato nel mese corrente.")
@@ -1611,7 +1615,7 @@ def render_generation_page():
                 num_rows="fixed",
                 disabled=True,
                 column_config={
-                    "FOGLIO_KEY": None,
+                    "ROW_ID": None,
                     "STATO_FOGLIO": st.column_config.TextColumn("Stato foglio", disabled=True),
                     "ORIGINE_MASTER": st.column_config.TextColumn("Attività base", disabled=True),
                     "TIPO_LIBRI": st.column_config.TextColumn("Tipo libri", disabled=True),
@@ -1626,7 +1630,6 @@ def render_generation_page():
                     "TIPO_CONTRATTO": st.column_config.TextColumn("Tipo contratto", disabled=True),
                     "SCADENZA_CONTRATTO": st.column_config.TextColumn("Scadenza contratto", disabled=True),
                     "ATTIVITA_RIGA": st.column_config.TextColumn("Attività", disabled=True),
-                    "MODALITA_STEP4": st.column_config.TextColumn("Modalità", disabled=True),
                 },
                 key="editor_step4_table_finale",
             )
@@ -1634,12 +1637,10 @@ def render_generation_page():
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+
 def render_step4_page():
     render_page_title("4. Sostituzioni/Azzeramenti")
     st.markdown('<div class="section-box">', unsafe_allow_html=True)
-
-    if "step4_massive_selected_keys" not in st.session_state:
-        st.session_state["step4_massive_selected_keys"] = set()
 
     if not st.session_state["master_loaded"]:
         st.warning("Prima carica e verifica i master nella sezione 'Origine dati'.")
@@ -1650,9 +1651,6 @@ def render_step4_page():
     mese = int(st.session_state.get("mese_step3", date.today().month))
     societa_options = get_societa_options()
 
-    # =========================
-    # NUOVO FOGLIO / SOSTITUZIONE
-    # =========================
     st.markdown('<div class="action-box">', unsafe_allow_html=True)
     st.markdown('<div class="action-title">NUOVO FOGLIO PRESENZA / SOSTITUZIONE</div>', unsafe_allow_html=True)
     st.markdown('<div class="action-subtitle">Crea un foglio nuovo fuori dal flusso standard</div>', unsafe_allow_html=True)
@@ -1664,12 +1662,7 @@ def render_step4_page():
         with c1:
             modalita = st.selectbox(
                 "Cosa vuoi fare",
-                [
-                    "Sostituzione con titolare",
-                    "Sostituzione con sostituto spot",
-                    "Nuovo Dipendente/PDV",
-                    "Foglio vuoto",
-                ],
+                ["Sostituzione con titolare", "Sostituzione con sostituto spot", "Foglio presenza vuoto"],
                 key="step4_modalita",
             )
         with c2:
@@ -1707,25 +1700,10 @@ def render_step4_page():
 
         dipendenti_table = pd.DataFrame()
         pdv_table = pd.DataFrame()
-        needs_tables = normalize_upper(modalita) != "FOGLIO VUOTO"
 
-        if needs_tables:
-            modalita_lookup = modalita if normalize_upper(modalita) != "NUOVO DIPENDENTE/PDV" else "Sostituzione con titolare"
-            dipendenti_table = build_dipendenti_table(societa, attivita, modalita_lookup)
+        if normalize_upper(modalita) != "FOGLIO PRESENZA VUOTO":
+            dipendenti_table = build_dipendenti_table(societa, attivita, modalita)
             pdv_table = build_pdv_table(societa, attivita)
-
-            st.markdown(
-                """
-                <div class="soft-note">
-                    Selezione guidata:
-                    <br>- puoi selezionare una sola riga per tabella
-                    <br>- puoi selezionare anche una sola tabella
-                    <br>- se selezioni solo Dipendente il PDV resta vuoto
-                    <br>- se selezioni solo Punto Vendita Nome/CF restano vuoti
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
 
             filtro_dip = st.text_input("Filtro tabella dipendenti", placeholder="Nome / cognome", key="step4_filtro_dip")
             filtro_pdv = st.text_input("Filtro tabella punto vendita", placeholder="PDV", key="step4_filtro_pdv")
@@ -1733,7 +1711,6 @@ def render_step4_page():
             if filtro_dip.strip() and not dipendenti_table.empty:
                 mask = dipendenti_table["NOMINATIVO"].astype(str).str.upper().str.contains(filtro_dip.strip().upper(), na=False)
                 dipendenti_table = dipendenti_table[mask].copy()
-
             if filtro_pdv.strip() and not pdv_table.empty:
                 mask = pdv_table["PUNTO_VENDITA"].astype(str).str.upper().str.contains(filtro_pdv.strip().upper(), na=False)
                 pdv_table = pdv_table[mask].copy()
@@ -1797,7 +1774,7 @@ def render_step4_page():
 
             record = base_step4_record(modalita, societa, attivita, anno, mese, selected_days)
 
-            if needs_tables:
+            if normalize_upper(modalita) != "FOGLIO PRESENZA VUOTO":
                 dip_row, dip_count = get_single_selected_row(dipendenti_table if not dipendenti_table.empty else pd.DataFrame())
                 pdv_row, pdv_count = get_single_selected_row(pdv_table if not pdv_table.empty else pd.DataFrame())
 
@@ -1806,39 +1783,26 @@ def render_step4_page():
                     st.markdown("</div>", unsafe_allow_html=True)
                     st.markdown("</div>", unsafe_allow_html=True)
                     return
-
-                if dip_count == 0 and pdv_count == 0:
-                    st.error("Seleziona almeno una riga da una delle due tabelle.")
+                if dip_count == 0 or pdv_count == 0:
+                    st.error("Selezionare una riga nella tabella dipendenti e una nella tabella punto vendita.")
                     st.markdown("</div>", unsafe_allow_html=True)
                     st.markdown("</div>", unsafe_allow_html=True)
                     return
 
                 apply_selected_rows_to_record(record, dip_row, pdv_row, selected_days)
 
-                if normalize_upper(modalita) in {
-                    "SOSTITUZIONE CON TITOLARE",
-                    "SOSTITUZIONE CON SOSTITUTO SPOT",
-                    "NUOVO DIPENDENTE/PDV",
-                }:
-                    record["netto_mese_dynamic"] = False
-                    record["allow_increase"] = False
-
             update_sheet_totals(record)
-
             key = format_sheet_key(record["row_id"], anno, mese)
             st.session_state["fogli_generati"][key] = record
             st.session_state["sheet_warnings"][key] = []
             st.session_state["foglio_attivo"] = key
             append_record_to_generation_table(record)
-
             st.success("Foglio creato correttamente.")
             st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # =========================
     # AZZERAMENTO MASSIVO
-    # =========================
     st.markdown('<div class="action-box">', unsafe_allow_html=True)
     st.markdown('<div class="action-title">AZZERAMENTO MASSIVO</div>', unsafe_allow_html=True)
     st.markdown('<div class="action-subtitle">Azzera le ore di più fogli insieme senza aprirli uno a uno</div>', unsafe_allow_html=True)
@@ -1879,12 +1843,7 @@ def render_step4_page():
             )
 
     selected_days = get_selected_days(anno, mese, step_tipo_giorno, giorno_singolo_value, periodo_value)
-
-    filtro_nome = st.text_input(
-        "Filtro tabella azzeramento massivo",
-        placeholder="Nome / cognome / pdv",
-        key="step525_filtro",
-    )
+    filtro_nome = st.text_input("Filtro tabella azzeramento massivo", placeholder="Nome / cognome / pdv", key="step525_filtro")
 
     righe = []
     for foglio_key, record in st.session_state["fogli_generati"].items():
@@ -1894,12 +1853,9 @@ def render_step4_page():
             continue
         if normalize_upper(record["origine_master"]) != normalize_upper(step_attivita):
             continue
-
-        already_selected = foglio_key in st.session_state["step4_massive_selected_keys"]
-
         righe.append(
             {
-                "SELEZIONA": already_selected,
+                "SELEZIONA": False,
                 "FOGLIO_KEY": foglio_key,
                 "NOMINATIVO_DIPENDENTE": normalize_text(record["nome"]),
                 "PDV": normalize_text(record["pdv"]),
@@ -1909,7 +1865,6 @@ def render_step4_page():
         )
 
     massive_table = pd.DataFrame(righe)
-
     if filtro_nome.strip() and not massive_table.empty:
         up = filtro_nome.strip().upper()
         mask = (
@@ -1937,15 +1892,8 @@ def render_step4_page():
             key="step525_massive_table",
         )
 
-        visible_keys = set(edited_massive["FOGLIO_KEY"].tolist())
-        selected_visible = set(edited_massive.loc[edited_massive["SELEZIONA"] == True, "FOGLIO_KEY"].tolist())
-
-        existing = set(st.session_state["step4_massive_selected_keys"])
-        existing = existing - visible_keys
-        existing = existing | selected_visible
-        st.session_state["step4_massive_selected_keys"] = existing
-
-        count_selected = len(st.session_state["step4_massive_selected_keys"])
+        selected_rows = edited_massive[edited_massive["SELEZIONA"] == True].copy()
+        count_selected = len(selected_rows)
 
         if selected_days and count_selected > 0:
             st.markdown(
@@ -1973,10 +1921,10 @@ def render_step4_page():
                 return
 
             modificati = 0
-            for foglio_key in list(st.session_state["step4_massive_selected_keys"]):
+            for _, row in selected_rows.iterrows():
+                foglio_key = row["FOGLIO_KEY"]
                 if foglio_key not in st.session_state["fogli_generati"]:
                     continue
-
                 record = st.session_state["fogli_generati"][foglio_key]
                 if record.get("lucchetto_mese", False) or record.get("lucchetto_foglio", False):
                     continue
@@ -1985,7 +1933,6 @@ def render_step4_page():
                 for idx in df.index:
                     if int(df.at[idx, "GIORNO_NUM"]) not in selected_days:
                         continue
-
                     if normalize_upper(record["origine_master"]) == ORIGINE_EDICOLA:
                         df.at[idx, "EDICOLA_ORE"] = 0.0
                         df.at[idx, "EDICOLA_€"] = 0.0
@@ -2002,7 +1949,6 @@ def render_step4_page():
                 st.session_state["sheet_warnings"][foglio_key] = update_sheet_totals(record)
                 modificati += 1
 
-            st.session_state["step4_massive_selected_keys"] = set()
             st.success(f"Azzeramento massivo completato. Fogli aggiornati: {modificati}.")
             st.rerun()
 
@@ -2406,25 +2352,16 @@ def render_sheet_page():
     with col_reset2:
         if st.button("Elimina foglio presenza", disabled=locked, use_container_width=True, key=f"elimina_{selected_key}"):
             row_id = record["row_id"]
-            is_step4 = bool(record.get("is_step4", False))
-
             del st.session_state["fogli_generati"][selected_key]
             st.session_state["sheet_warnings"].pop(selected_key, None)
-
-            if not is_step4:
-                base = st.session_state["generation_table"].copy()
-                base = base[base["ROW_ID"] != row_id].copy().reset_index(drop=True)
-                st.session_state["generation_table"] = base
-
-            if "step4_massive_selected_keys" in st.session_state:
-                selected_keys = set(st.session_state["step4_massive_selected_keys"])
-                selected_keys.discard(selected_key)
-                st.session_state["step4_massive_selected_keys"] = selected_keys
+            base = st.session_state["generation_table"].copy()
+            base = base[base["ROW_ID"] != row_id].copy().reset_index(drop=True)
+            st.session_state["generation_table"] = base
 
             remaining = list(st.session_state["fogli_generati"].keys())
             st.session_state["foglio_attivo"] = remaining[0] if remaining else None
             st.rerun()
-            
+
     st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================
