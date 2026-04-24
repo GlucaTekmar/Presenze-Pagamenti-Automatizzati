@@ -2406,16 +2406,25 @@ def render_sheet_page():
     with col_reset2:
         if st.button("Elimina foglio presenza", disabled=locked, use_container_width=True, key=f"elimina_{selected_key}"):
             row_id = record["row_id"]
+            is_step4 = bool(record.get("is_step4", False))
+
             del st.session_state["fogli_generati"][selected_key]
             st.session_state["sheet_warnings"].pop(selected_key, None)
-            base = st.session_state["generation_table"].copy()
-            base = base[base["ROW_ID"] != row_id].copy().reset_index(drop=True)
-            st.session_state["generation_table"] = base
+
+            if not is_step4:
+                base = st.session_state["generation_table"].copy()
+                base = base[base["ROW_ID"] != row_id].copy().reset_index(drop=True)
+                st.session_state["generation_table"] = base
+
+            if "step4_massive_selected_keys" in st.session_state:
+                selected_keys = set(st.session_state["step4_massive_selected_keys"])
+                selected_keys.discard(selected_key)
+                st.session_state["step4_massive_selected_keys"] = selected_keys
 
             remaining = list(st.session_state["fogli_generati"].keys())
             st.session_state["foglio_attivo"] = remaining[0] if remaining else None
             st.rerun()
-
+            
     st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================
