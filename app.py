@@ -1311,14 +1311,40 @@ def render_master_page():
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-def render_generation_page():
-    render_page_title("2. Generazione fogli")
-    st.markdown('<div class="section-box">', unsafe_allow_html=True)
+def build_step4_table_from_generated(anno: int, mese: int) -> pd.DataFrame:
+    righe = []
 
-    if "step4_table" not in st.session_state:
-        st.session_state["step4_table"] = pd.DataFrame(
+    for foglio_key, record in st.session_state["fogli_generati"].items():
+        if not bool(record.get("is_step4", False)):
+            continue
+        if int(record.get("anno", 0)) != int(anno) or int(record.get("mese", 0)) != int(mese):
+            continue
+
+        righe.append(
+            {
+                "FOGLIO_KEY": foglio_key,
+                "STATO_FOGLIO": "CREATO",
+                "ORIGINE_MASTER": normalize_text(record.get("origine_master", "")),
+                "TIPO_LIBRI": normalize_text(record.get("tipo_libri", "")),
+                "NOME": normalize_text(record.get("nome", "")),
+                "COD_FISCALE": normalize_text(record.get("cf", "")),
+                "SOCIETA": normalize_text(record.get("societa", "")),
+                "PDV": normalize_text(record.get("pdv", "")),
+                "TELEFONO": normalize_text(record.get("telefono", "")),
+                "EMAIL": normalize_text(record.get("email", "")),
+                "NETTO_ORA": round(safe_float(record.get("netto_ora", 0.0)), 2),
+                "NETTO_MESE": round(safe_float(record.get("netto_mese", 0.0)), 2),
+                "TIPO_CONTRATTO": normalize_text(record.get("tipo_contratto", "")),
+                "SCADENZA_CONTRATTO": normalize_text(record.get("scadenza_contratto", "")),
+                "ATTIVITA_RIGA": normalize_text(record.get("attivita_riga", "")),
+                "MODALITA_STEP4": normalize_text(record.get("step4_modalita", "")),
+            }
+        )
+
+    if not righe:
+        return pd.DataFrame(
             columns=[
-                "ROW_ID",
+                "FOGLIO_KEY",
                 "STATO_FOGLIO",
                 "ORIGINE_MASTER",
                 "TIPO_LIBRI",
@@ -1333,8 +1359,18 @@ def render_generation_page():
                 "TIPO_CONTRATTO",
                 "SCADENZA_CONTRATTO",
                 "ATTIVITA_RIGA",
+                "MODALITA_STEP4",
             ]
         )
+
+    return pd.DataFrame(righe).sort_values(
+        ["SOCIETA", "ATTIVITA_RIGA", "NOME", "PDV"]
+    ).reset_index(drop=True)
+
+
+def render_generation_page():
+    render_page_title("2. Generazione fogli")
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
 
     if not st.session_state["master_loaded"]:
         st.warning("Prima carica e verifica i master nella sezione 'Origine dati'.")
@@ -1355,6 +1391,10 @@ def render_generation_page():
         st.warning("Nessuna riga disponibile.")
         st.markdown("</div>", unsafe_allow_html=True)
         return
+
+    # Sicurezza: la tabella principale mostra solo righe da master
+    if "IS_STEP4" in full_table.columns:
+        full_table = full_table[full_table["IS_STEP4"] != True].copy()
 
     def is_created(row_id: str) -> bool:
         key = format_sheet_key(normalize_text(row_id), anno, mese)
@@ -1434,6 +1474,9 @@ def render_generation_page():
                 st.rerun()
 
         editor_table = st.session_state["generation_table"].copy()
+        if "IS_STEP4" in editor_table.columns:
+            editor_table = editor_table[editor_table["IS_STEP4"] != True].copy()
+
         editor_table["STATO_FOGLIO"] = editor_table["ROW_ID"].apply(
             lambda rid: "CREATO" if is_created(rid) else "NON CREATO"
         )
@@ -1488,6 +1531,9 @@ def render_generation_page():
                 st.session_state["generation_table"]["SELEZIONA"] == True
             ].copy()
 
+            if "IS_STEP4" in selected.columns:
+                selected = selected[selected["IS_STEP4"] != True].copy()
+
             if selected.empty:
                 st.warning("Seleziona almeno una riga.")
                 st.markdown("</div>", unsafe_allow_html=True)
@@ -1505,9 +1551,6 @@ def render_generation_page():
                 key = format_sheet_key(normalize_text(row["ROW_ID"]), anno, mese)
 
                 if key in st.session_state["fogli_generati"]:
-                    continue
-
-                if bool(row.get("IS_STEP4", False)):
                     continue
 
                 record = init_sheet_record_from_master(
@@ -1539,7 +1582,7 @@ def render_generation_page():
     st.markdown('<div class="inner-box">', unsafe_allow_html=True)
     st.markdown('<div class="table-title">NUOVI FOGLI / SOSTITUZIONI</div>', unsafe_allow_html=True)
 
-    step4_table = st.session_state["step4_table"].copy()
+    step4_table = build_step4_table_from_generated(anno=anno, mese=mese)
 
     if step4_table.empty:
         st.info("Nessun nuovo foglio / sostituzione creato nel mese corrente.")
@@ -1568,7 +1611,7 @@ def render_generation_page():
                 num_rows="fixed",
                 disabled=True,
                 column_config={
-                    "ROW_ID": None,
+                    "FOGLIO_KEY": None,
                     "STATO_FOGLIO": st.column_config.TextColumn("Stato foglio", disabled=True),
                     "ORIGINE_MASTER": st.column_config.TextColumn("Attività base", disabled=True),
                     "TIPO_LIBRI": st.column_config.TextColumn("Tipo libri", disabled=True),
@@ -1583,13 +1626,13 @@ def render_generation_page():
                     "TIPO_CONTRATTO": st.column_config.TextColumn("Tipo contratto", disabled=True),
                     "SCADENZA_CONTRATTO": st.column_config.TextColumn("Scadenza contratto", disabled=True),
                     "ATTIVITA_RIGA": st.column_config.TextColumn("Attività", disabled=True),
+                    "MODALITA_STEP4": st.column_config.TextColumn("Modalità", disabled=True),
                 },
                 key="editor_step4_table_finale",
             )
 
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
-
 
 def render_step4_page():
     render_page_title("4. Sostituzioni/Azzeramenti")
