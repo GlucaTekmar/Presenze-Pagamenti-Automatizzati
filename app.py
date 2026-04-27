@@ -1783,26 +1783,34 @@ def render_step4_page():
             }
         )
 
-    massive_table = pd.DataFrame(righe_massive)
+    massive_table_full = pd.DataFrame(righe_massive)
 
-    if filtro_nome_massive.strip() and not massive_table.empty:
+    if massive_table_full.empty:
+        massive_table_view = massive_table_full.copy()
+    else:
+        massive_table_view = massive_table_full.copy()
+
+    if filtro_nome_massive.strip() and not massive_table_view.empty:
         filtro_up = filtro_nome_massive.strip().upper()
         mask = (
-            massive_table["NOMINATIVO_DIPENDENTE"].astype(str).str.upper().str.contains(filtro_up, na=False)
-            | massive_table["PDV"].astype(str).str.upper().str.contains(filtro_up, na=False)
+            massive_table_view["NOMINATIVO_DIPENDENTE"].astype(str).str.upper().str.contains(filtro_up, na=False)
+            | massive_table_view["PDV"].astype(str).str.upper().str.contains(filtro_up, na=False)
         )
-        massive_table = massive_table[mask].copy()
+        massive_table_view = massive_table_view[mask].copy()
 
     st.markdown(
         '<div class="soft-note"><b>Seleziona i fogli presenza da azzerare</b></div>',
         unsafe_allow_html=True,
     )
 
-    if massive_table.empty:
-        st.info("Nessun foglio presenza coerente trovato per i criteri selezionati.")
+    if massive_table_view.empty:
+        if massive_table_full.empty:
+            st.info("Nessun foglio presenza coerente trovato per i criteri selezionati.")
+        else:
+            st.info("Nessun risultato trovato con il filtro inserito.")
     else:
         edited_massive = st.data_editor(
-            massive_table.reset_index(drop=True),
+            massive_table_view.reset_index(drop=True),
             hide_index=True,
             use_container_width=True,
             num_rows="fixed",
@@ -1814,7 +1822,7 @@ def render_step4_page():
                 "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
                 "TIPO_ATTIVITA": st.column_config.TextColumn("Tipo attività", disabled=True),
             },
-            key="step525_massive_table",
+            key=f"step525_massive_table_{step_societa}_{step_attivita}_{step_tipo_giorno}",
         )
 
         visible_keys = set(edited_massive["FOGLIO_KEY"].tolist())
@@ -1827,7 +1835,7 @@ def render_step4_page():
         selected_keys = selected_keys | selected_visible
         st.session_state["step4_massive_selected_keys"] = selected_keys
 
-        count_selected = len(st.session_state["step4_massive_selected_keys"])
+    count_selected = len(st.session_state["step4_massive_selected_keys"])
 
         if selected_days_massive and count_selected > 0:
             st.markdown(
