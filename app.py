@@ -1530,64 +1530,7 @@ def render_generation_page():
             st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
-
-    # =========================
-    # TABELLA SEPARATA NUOVI FOGLI / SOSTITUZIONI
-    # =========================
-    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
-    st.markdown('<div class="table-title">NUOVI FOGLI / SOSTITUZIONI</div>', unsafe_allow_html=True)
-
-    step4_table = st.session_state["step4_table"].copy()
-
-    if step4_table.empty:
-        st.info("Nessun nuovo foglio / sostituzione creato nel mese corrente.")
-    else:
-        filtro_step4 = st.text_input(
-            "Filtro semplice nuovi fogli/sostituzioni",
-            placeholder="Nome o PDV",
-            key="filtro_step4_table",
-        )
-
-        if filtro_step4.strip():
-            up = filtro_step4.strip().upper()
-            mask = (
-                step4_table["NOME"].astype(str).str.upper().str.contains(up, na=False)
-                | step4_table["PDV"].astype(str).str.upper().str.contains(up, na=False)
-            )
-            step4_table = step4_table[mask].copy()
-
-        if step4_table.empty:
-            st.info("Nessun risultato trovato nella tabella nuovi fogli / sostituzioni.")
-        else:
-            st.data_editor(
-                step4_table.reset_index(drop=True),
-                hide_index=True,
-                use_container_width=True,
-                num_rows="fixed",
-                disabled=True,
-                column_config={
-                    "ROW_ID": None,
-                    "STATO_FOGLIO": st.column_config.TextColumn("Stato foglio", disabled=True),
-                    "ORIGINE_MASTER": st.column_config.TextColumn("Attività base", disabled=True),
-                    "TIPO_LIBRI": st.column_config.TextColumn("Tipo libri", disabled=True),
-                    "NOME": st.column_config.TextColumn("Nome", disabled=True),
-                    "COD_FISCALE": st.column_config.TextColumn("CF", disabled=True),
-                    "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
-                    "PDV": st.column_config.TextColumn("PDV", disabled=True),
-                    "TELEFONO": st.column_config.TextColumn("Telefono", disabled=True),
-                    "EMAIL": st.column_config.TextColumn("Email", disabled=True),
-                    "NETTO_ORA": st.column_config.NumberColumn("Netto orario", format="%.2f €", disabled=True),
-                    "NETTO_MESE": st.column_config.NumberColumn("Netto mese", format="%.2f €", disabled=True),
-                    "TIPO_CONTRATTO": st.column_config.TextColumn("Tipo contratto", disabled=True),
-                    "SCADENZA_CONTRATTO": st.column_config.TextColumn("Scadenza contratto", disabled=True),
-                    "ATTIVITA_RIGA": st.column_config.TextColumn("Attività", disabled=True),
-                },
-                key="editor_step4_table_finale",
-            )
-
     st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
 
 def render_step4_page():
     render_page_title("4. Sostituzioni/Azzeramenti")
