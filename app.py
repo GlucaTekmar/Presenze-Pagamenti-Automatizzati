@@ -1545,6 +1545,9 @@ def render_step4_page():
     mese = int(st.session_state.get("mese_step3", date.today().month))
     societa_options = get_societa_options()
 
+    # =========================
+    # NUOVO FOGLIO PRESENZA / SOSTITUZIONE
+    # =========================
     st.markdown('<div class="action-box">', unsafe_allow_html=True)
     st.markdown('<div class="action-title">NUOVO FOGLIO PRESENZA / SOSTITUZIONE</div>', unsafe_allow_html=True)
     st.markdown('<div class="action-subtitle">Crea un foglio nuovo fuori dal flusso standard</div>', unsafe_allow_html=True)
@@ -1556,7 +1559,11 @@ def render_step4_page():
         with c1:
             modalita = st.selectbox(
                 "Cosa vuoi fare",
-                ["Sostituzione con titolare", "Sostituzione con sostituto spot", "Foglio presenza vuoto"],
+                [
+                    "Sostituzione con titolare",
+                    "Sostituzione con sostituto spot",
+                    "Foglio presenza vuoto",
+                ],
                 key="step4_modalita",
             )
         with c2:
@@ -1566,7 +1573,11 @@ def render_step4_page():
         with c3:
             attivita = st.selectbox("Attività", [ORIGINE_EDICOLA, ORIGINE_LIBRI], key="step4_attivita")
         with c4:
-            tipo_giorno = st.selectbox("Giorno singolo oppure periodo", ["Giorno singolo", "Periodo"], key="step4_tipo_giorno")
+            tipo_giorno = st.selectbox(
+                "Giorno singolo oppure periodo",
+                ["Giorno singolo", "Periodo"],
+                key="step4_tipo_giorno",
+            )
 
         primo_giorno = date(anno, mese, 1)
         ultimo_giorno = date(anno, mese, calendar.monthrange(anno, mese)[1])
@@ -1590,7 +1601,13 @@ def render_step4_page():
                 key="step4_periodo",
             )
 
-        selected_days = get_selected_days(anno, mese, tipo_giorno, giorno_singolo_value, periodo_value)
+        selected_days = get_selected_days(
+            anno=anno,
+            mese=mese,
+            modo=tipo_giorno,
+            giorno_singolo_value=giorno_singolo_value,
+            periodo_value=periodo_value,
+        )
 
         dipendenti_table = pd.DataFrame()
         pdv_table = pd.DataFrame()
@@ -1599,15 +1616,53 @@ def render_step4_page():
             dipendenti_table = build_dipendenti_table(societa, attivita, modalita)
             pdv_table = build_pdv_table(societa, attivita)
 
-            filtro_dip = st.text_input("Filtro tabella dipendenti", placeholder="Nome / cognome", key="step4_filtro_dip")
-            filtro_pdv = st.text_input("Filtro tabella punto vendita", placeholder="PDV", key="step4_filtro_pdv")
+            st.markdown(
+                """
+                <div class="soft-note">
+                    Selezione guidata:
+                    <br>- puoi selezionare una sola riga per tabella
+                    <br>- puoi selezionare anche una sola tabella
+                    <br>- se selezioni solo Dipendente il PDV resta vuoto
+                    <br>- se selezioni solo Punto Vendita Nome/CF restano vuoti
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            filtro_dip = st.text_input(
+                "Filtro tabella dipendenti",
+                placeholder="Nome / cognome",
+                key="step4_filtro_dip",
+            )
+            filtro_pdv = st.text_input(
+                "Filtro tabella punto vendita",
+                placeholder="PDV",
+                key="step4_filtro_pdv",
+            )
 
             if filtro_dip.strip() and not dipendenti_table.empty:
-                mask = dipendenti_table["NOMINATIVO"].astype(str).str.upper().str.contains(filtro_dip.strip().upper(), na=False)
+                mask = dipendenti_table["NOMINATIVO"].astype(str).str.upper().str.contains(
+                    filtro_dip.strip().upper(),
+                    na=False,
+                )
                 dipendenti_table = dipendenti_table[mask].copy()
+
             if filtro_pdv.strip() and not pdv_table.empty:
-                mask = pdv_table["PUNTO_VENDITA"].astype(str).str.upper().str.contains(filtro_pdv.strip().upper(), na=False)
+                mask = pdv_table["PUNTO_VENDITA"].astype(str).str.upper().str.contains(
+                    filtro_pdv.strip().upper(),
+                    na=False,
+                )
                 pdv_table = pdv_table[mask].copy()
+
+            if not dipendenti_table.empty:
+                dipendenti_table = dipendenti_table.sort_values(
+                    ["NOMINATIVO", "CODICE_FISCALE"]
+                ).reset_index(drop=True)
+
+            if not pdv_table.empty:
+                pdv_table = pdv_table.sort_values(
+                    ["PUNTO_VENDITA", "TIPO_ATTIVITA"]
+                ).reset_index(drop=True)
 
             st.markdown('<div class="table-title">Tabella dipendenti</div>', unsafe_allow_html=True)
             if dipendenti_table.empty:
@@ -1659,7 +1714,12 @@ def render_step4_page():
                     key="step4_table_pdv",
                 )
 
-        if st.button("NUOVO FOGLIO PRESENZA / SOSTITUZIONE", type="primary", use_container_width=True, key="btn_step4_generate"):
+        if st.button(
+            "NUOVO FOGLIO PRESENZA / SOSTITUZIONE",
+            type="primary",
+            use_container_width=True,
+            key="btn_step4_generate",
+        ):
             if not selected_days:
                 st.error("Giorno o periodo non valido per il mese selezionato.")
                 st.markdown("</div>", unsafe_allow_html=True)
@@ -1669,37 +1729,48 @@ def render_step4_page():
             record = base_step4_record(modalita, societa, attivita, anno, mese, selected_days)
 
             if normalize_upper(modalita) != "FOGLIO PRESENZA VUOTO":
-                dip_row, dip_count = get_single_selected_row(dipendenti_table if not dipendenti_table.empty else pd.DataFrame())
-                pdv_row, pdv_count = get_single_selected_row(pdv_table if not pdv_table.empty else pd.DataFrame())
+                dip_row, dip_count = get_single_selected_row(
+                    dipendenti_table if not dipendenti_table.empty else pd.DataFrame()
+                )
+                pdv_row, pdv_count = get_single_selected_row(
+                    pdv_table if not pdv_table.empty else pd.DataFrame()
+                )
 
                 if dip_count > 1 or pdv_count > 1:
                     st.error("Selezionare una sola riga per ogni tabella.")
                     st.markdown("</div>", unsafe_allow_html=True)
                     st.markdown("</div>", unsafe_allow_html=True)
                     return
-                if dip_count == 0 or pdv_count == 0:
-                    st.error("Selezionare una riga nella tabella dipendenti e una nella tabella punto vendita.")
+
+                if dip_count == 0 and pdv_count == 0:
+                    st.error("Seleziona almeno una riga da una delle due tabelle.")
                     st.markdown("</div>", unsafe_allow_html=True)
                     st.markdown("</div>", unsafe_allow_html=True)
                     return
 
                 apply_selected_rows_to_record(record, dip_row, pdv_row, selected_days)
 
+                # Per sostituzioni e fogli non vuoti:
+                # il foglio non deve permettere aumenti ore nel corpo
+                record["netto_mese_dynamic"] = False
+                record["allow_increase"] = False
+
             update_sheet_totals(record)
+
             key = format_sheet_key(record["row_id"], anno, mese)
             st.session_state["fogli_generati"][key] = record
             st.session_state["sheet_warnings"][key] = []
             st.session_state["foglio_attivo"] = key
             append_record_to_generation_table(record)
+
             st.success("Foglio creato correttamente.")
             st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # =========================
     # AZZERAMENTO MASSIVO
-    if "step4_massive_selected_keys" not in st.session_state:
-        st.session_state["step4_massive_selected_keys"] = set()
-
+    # =========================
     st.markdown('<div class="action-box">', unsafe_allow_html=True)
     st.markdown('<div class="action-title">AZZERAMENTO MASSIVO</div>', unsafe_allow_html=True)
     st.markdown('<div class="action-subtitle">Azzera le ore di più fogli insieme senza aprirli uno a uno</div>', unsafe_allow_html=True)
@@ -1755,12 +1826,6 @@ def render_step4_page():
         periodo_value=periodo_value_massive,
     )
 
-    filtro_nome_massive = st.text_input(
-        "Filtro tabella azzeramento massivo",
-        placeholder="Nome / cognome / pdv",
-        key="step525_filtro",
-    )
-
     righe_massive = []
     for foglio_key, record in st.session_state["fogli_generati"].items():
         if int(record.get("anno", 0)) != int(anno) or int(record.get("mese", 0)) != int(mese):
@@ -1770,11 +1835,9 @@ def render_step4_page():
         if normalize_upper(record.get("origine_master", "")) != normalize_upper(step_attivita):
             continue
 
-        already_selected = foglio_key in st.session_state["step4_massive_selected_keys"]
-
         righe_massive.append(
             {
-                "SELEZIONA": already_selected,
+                "SELEZIONA": False,
                 "FOGLIO_KEY": foglio_key,
                 "NOMINATIVO_DIPENDENTE": normalize_text(record.get("nome", "")),
                 "PDV": normalize_text(record.get("pdv", "")),
@@ -1783,34 +1846,22 @@ def render_step4_page():
             }
         )
 
-    massive_table_full = pd.DataFrame(righe_massive)
-
-    if massive_table_full.empty:
-        massive_table_view = massive_table_full.copy()
-    else:
-        massive_table_view = massive_table_full.copy()
-
-    if filtro_nome_massive.strip() and not massive_table_view.empty:
-        filtro_up = filtro_nome_massive.strip().upper()
-        mask = (
-            massive_table_view["NOMINATIVO_DIPENDENTE"].astype(str).str.upper().str.contains(filtro_up, na=False)
-            | massive_table_view["PDV"].astype(str).str.upper().str.contains(filtro_up, na=False)
-        )
-        massive_table_view = massive_table_view[mask].copy()
+    massive_table = pd.DataFrame(righe_massive)
 
     st.markdown(
         '<div class="soft-note"><b>Seleziona i fogli presenza da azzerare</b></div>',
         unsafe_allow_html=True,
     )
 
-    if massive_table_view.empty:
-        if massive_table_full.empty:
-            st.info("Nessun foglio presenza coerente trovato per i criteri selezionati.")
-        else:
-            st.info("Nessun risultato trovato con il filtro inserito.")
+    if massive_table.empty:
+        st.info("Nessun foglio presenza coerente trovato per i criteri selezionati.")
     else:
+        massive_table = massive_table.sort_values(
+            ["NOMINATIVO_DIPENDENTE", "PDV", "TIPO_ATTIVITA"]
+        ).reset_index(drop=True)
+
         edited_massive = st.data_editor(
-            massive_table_view.reset_index(drop=True),
+            massive_table,
             hide_index=True,
             use_container_width=True,
             num_rows="fixed",
@@ -1822,46 +1873,75 @@ def render_step4_page():
                 "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
                 "TIPO_ATTIVITA": st.column_config.TextColumn("Tipo attività", disabled=True),
             },
-            key=f"step525_massive_table_{step_societa}_{step_attivita}_{step_tipo_giorno}",
+            key="step525_massive_table",
         )
 
-        visible_keys = set(edited_massive["FOGLIO_KEY"].tolist())
-        selected_visible = set(
-            edited_massive.loc[edited_massive["SELEZIONA"] == True, "FOGLIO_KEY"].tolist()
-        )
+        selected_rows = edited_massive[edited_massive["SELEZIONA"] == True].copy()
+        count_selected = len(selected_rows)
 
-        selected_keys = set(st.session_state["step4_massive_selected_keys"])
-        selected_keys = selected_keys - visible_keys
-        selected_keys = selected_keys | selected_visible
-        st.session_state["step4_massive_selected_keys"] = selected_keys
+        if selected_days_massive and count_selected > 0:
+            st.markdown(
+                f"""
+                <div class="soft-note">
+                    <b>Conferma operativa</b><br>
+                    Fogli selezionati: {count_selected}<br>
+                    Intervallo da azzerare: {selected_days_text(selected_days_massive)}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-    count_selected = len(st.session_state["step4_massive_selected_keys"])
+        if st.button("AZZERA ORE", type="primary", use_container_width=True, key="step525_btn_azzera"):
+            if not selected_days_massive:
+                st.error("Giorno o periodo non valido per il mese selezionato.")
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+                return
 
-    if selected_days_massive and count_selected > 0:
-        st.markdown(
-            f"""
-            <div class="soft-note">
-                <b>Conferma operativa</b><br>
-                Fogli selezionati: {count_selected}<br>
-                Intervallo da azzerare: {selected_days_text(selected_days_massive)}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+            if count_selected == 0:
+                st.error("Seleziona almeno un foglio presenza dalla tabella.")
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+                return
 
-    if st.button("AZZERA ORE", type="primary", use_container_width=True, key="step525_btn_azzera"):
-        if not selected_days_massive:
-            st.error("Giorno o periodo non valido per il mese selezionato.")
-            st.markdown("</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-            return
+            modificati = 0
 
-        if count_selected == 0:
-            st.error("Seleziona almeno un foglio presenza dalla tabella.")
-            st.markdown("</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-            return
-            
+            for _, row in selected_rows.iterrows():
+                foglio_key = row["FOGLIO_KEY"]
+
+                if foglio_key not in st.session_state["fogli_generati"]:
+                    continue
+
+                record = st.session_state["fogli_generati"][foglio_key]
+
+                if record.get("lucchetto_mese", False) or record.get("lucchetto_foglio", False):
+                    continue
+
+                df = record["tabella"].copy()
+
+                for idx in df.index:
+                    if int(df.at[idx, "GIORNO_NUM"]) not in selected_days_massive:
+                        continue
+
+                    if normalize_upper(record.get("origine_master", "")) == ORIGINE_EDICOLA:
+                        df.at[idx, "EDICOLA_ORE"] = 0.0
+                        df.at[idx, "EDICOLA_€"] = 0.0
+                        df.at[idx, "EDICOLA_TIPO_ASSENZA"] = ""
+                    else:
+                        df.at[idx, "MONDADORI_ORE"] = 0.0
+                        df.at[idx, "MONDADORI_€"] = 0.0
+                        df.at[idx, "MONDADORI_TIPO_ASSENZA"] = ""
+                        df.at[idx, "GIUNTI_ORE"] = 0.0
+                        df.at[idx, "GIUNTI_€"] = 0.0
+                        df.at[idx, "GIUNTI_TIPO_ASSENZA"] = ""
+
+                record["tabella"] = df
+                st.session_state["sheet_warnings"][foglio_key] = update_sheet_totals(record)
+                modificati += 1
+
+            st.success(f"Azzeramento massivo completato correttamente. Fogli modificati: {modificati}")
+            st.rerun()
+
     st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
