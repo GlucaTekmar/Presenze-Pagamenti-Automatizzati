@@ -1837,30 +1837,67 @@ def render_step4_page():
 
     count_selected = len(st.session_state["step4_massive_selected_keys"])
 
-        if selected_days_massive and count_selected > 0:
-            st.markdown(
-                f"""
-                <div class="soft-note">
-                    <b>Conferma operativa</b><br>
-                    Fogli selezionati: {count_selected}<br>
-                    Intervallo da azzerare: {selected_days_text(selected_days_massive)}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+    if selected_days_massive and count_selected > 0:
+        st.markdown(
+            f"""
+            <div class="soft-note">
+                <b>Conferma operativa</b><br>
+                Fogli selezionati: {count_selected}<br>
+                Intervallo da azzerare: {selected_days_text(selected_days_massive)}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        if st.button("AZZERA ORE", type="primary", use_container_width=True, key="step525_btn_azzera"):
-            if not selected_days_massive:
-                st.error("Giorno o periodo non valido per il mese selezionato.")
-                st.markdown("</div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-                return
+    if st.button("AZZERA ORE", type="primary", use_container_width=True, key="step525_btn_azzera"):
+        if not selected_days_massive:
+            st.error("Giorno o periodo non valido per il mese selezionato.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
 
-            if count_selected == 0:
-                st.error("Seleziona almeno un foglio presenza dalla tabella.")
-                st.markdown("</div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-                return
+        if count_selected == 0:
+            st.error("Seleziona almeno un foglio presenza dalla tabella.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
+
+        modificati = 0
+
+        for foglio_key in list(st.session_state["step4_massive_selected_keys"]):
+            if foglio_key not in st.session_state["fogli_generati"]:
+                continue
+
+            record = st.session_state["fogli_generati"][foglio_key]
+
+            if record.get("lucchetto_mese", False) or record.get("lucchetto_foglio", False):
+                continue
+
+            df = record["tabella"].copy()
+
+            for idx in df.index:
+                if int(df.at[idx, "GIORNO_NUM"]) not in selected_days_massive:
+                    continue
+
+                if normalize_upper(record.get("origine_master", "")) == ORIGINE_EDICOLA:
+                    df.at[idx, "EDICOLA_ORE"] = 0.0
+                    df.at[idx, "EDICOLA_€"] = 0.0
+                    df.at[idx, "EDICOLA_TIPO_ASSENZA"] = ""
+                else:
+                    df.at[idx, "MONDADORI_ORE"] = 0.0
+                    df.at[idx, "MONDADORI_€"] = 0.0
+                    df.at[idx, "MONDADORI_TIPO_ASSENZA"] = ""
+                    df.at[idx, "GIUNTI_ORE"] = 0.0
+                    df.at[idx, "GIUNTI_€"] = 0.0
+                    df.at[idx, "GIUNTI_TIPO_ASSENZA"] = ""
+
+            record["tabella"] = df
+            st.session_state["sheet_warnings"][foglio_key] = update_sheet_totals(record)
+            modificati += 1
+
+        st.session_state["step4_massive_selected_keys"] = set()
+        st.success(f"Azzeramento massivo completato. Fogli aggiornati: {modificati}.")
+        st.rerun()
 
             modificati = 0
 
