@@ -1697,6 +1697,9 @@ def render_step4_page():
     st.markdown("</div>", unsafe_allow_html=True)
 
     # AZZERAMENTO MASSIVO
+    if "step4_massive_selected_keys" not in st.session_state:
+        st.session_state["step4_massive_selected_keys"] = set()
+
     st.markdown('<div class="action-box">', unsafe_allow_html=True)
     st.markdown('<div class="action-title">AZZERAMENTO MASSIVO</div>', unsafe_allow_html=True)
     st.markdown('<div class="action-subtitle">Azzera le ore di più fogli insieme senza aprirli uno a uno</div>', unsafe_allow_html=True)
@@ -1715,63 +1718,91 @@ def render_step4_page():
 
     m3, m4 = st.columns(2)
     with m3:
-        step_tipo_giorno = st.selectbox("Giorno singolo oppure periodo", ["Giorno singolo", "Periodo"], key="step525_tipo_giorno")
+        step_tipo_giorno = st.selectbox(
+            "Giorno singolo oppure periodo",
+            ["Giorno singolo", "Periodo"],
+            key="step525_tipo_giorno",
+        )
     with m4:
-        giorno_singolo_value = None
-        periodo_value = None
+        primo_giorno_massive = date(anno, mese, 1)
+        ultimo_giorno_massive = date(anno, mese, calendar.monthrange(anno, mese)[1])
+
+        giorno_singolo_value_massive = None
+        periodo_value_massive = None
+
         if step_tipo_giorno == "Giorno singolo":
-            giorno_singolo_value = st.date_input(
+            giorno_singolo_value_massive = st.date_input(
                 "Giorno singolo",
-                value=primo_giorno,
-                min_value=primo_giorno,
-                max_value=ultimo_giorno,
+                value=primo_giorno_massive,
+                min_value=primo_giorno_massive,
+                max_value=ultimo_giorno_massive,
                 key="step525_giorno_singolo",
             )
         else:
-            periodo_value = st.date_input(
+            periodo_value_massive = st.date_input(
                 "Periodo",
-                value=(primo_giorno, primo_giorno),
-                min_value=primo_giorno,
-                max_value=ultimo_giorno,
+                value=(primo_giorno_massive, primo_giorno_massive),
+                min_value=primo_giorno_massive,
+                max_value=ultimo_giorno_massive,
                 key="step525_periodo",
             )
 
-    selected_days = get_selected_days(anno, mese, step_tipo_giorno, giorno_singolo_value, periodo_value)
-    filtro_nome = st.text_input("Filtro tabella azzeramento massivo", placeholder="Nome / cognome / pdv", key="step525_filtro")
+    selected_days_massive = get_selected_days(
+        anno=anno,
+        mese=mese,
+        modo=step_tipo_giorno,
+        giorno_singolo_value=giorno_singolo_value_massive,
+        periodo_value=periodo_value_massive,
+    )
 
-    righe = []
+    filtro_nome_massive = st.text_input(
+        "Filtro tabella azzeramento massivo",
+        placeholder="Nome / cognome / pdv",
+        key="step525_filtro",
+    )
+
+    righe_massive = []
     for foglio_key, record in st.session_state["fogli_generati"].items():
-        if int(record["anno"]) != anno or int(record["mese"]) != mese:
+        if int(record.get("anno", 0)) != int(anno) or int(record.get("mese", 0)) != int(mese):
             continue
-        if normalize_upper(record["societa"]) != normalize_upper(step_societa):
+        if normalize_upper(record.get("societa", "")) != normalize_upper(step_societa):
             continue
-        if normalize_upper(record["origine_master"]) != normalize_upper(step_attivita):
+        if normalize_upper(record.get("origine_master", "")) != normalize_upper(step_attivita):
             continue
-        righe.append(
+
+        already_selected = foglio_key in st.session_state["step4_massive_selected_keys"]
+
+        righe_massive.append(
             {
-                "SELEZIONA": False,
+                "SELEZIONA": already_selected,
                 "FOGLIO_KEY": foglio_key,
-                "NOMINATIVO_DIPENDENTE": normalize_text(record["nome"]),
-                "PDV": normalize_text(record["pdv"]),
-                "SOCIETA": normalize_text(record["societa"]),
-                "TIPO_ATTIVITA": normalize_text(record["attivita_riga"]),
+                "NOMINATIVO_DIPENDENTE": normalize_text(record.get("nome", "")),
+                "PDV": normalize_text(record.get("pdv", "")),
+                "SOCIETA": normalize_text(record.get("societa", "")),
+                "TIPO_ATTIVITA": normalize_text(record.get("attivita_riga", "")),
             }
         )
 
-    massive_table = pd.DataFrame(righe)
-    if filtro_nome.strip() and not massive_table.empty:
-        up = filtro_nome.strip().upper()
+    massive_table = pd.DataFrame(righe_massive)
+
+    if filtro_nome_massive.strip() and not massive_table.empty:
+        filtro_up = filtro_nome_massive.strip().upper()
         mask = (
-            massive_table["NOMINATIVO_DIPENDENTE"].astype(str).str.upper().str.contains(up, na=False)
-            | massive_table["PDV"].astype(str).str.upper().str.contains(up, na=False)
+            massive_table["NOMINATIVO_DIPENDENTE"].astype(str).str.upper().str.contains(filtro_up, na=False)
+            | massive_table["PDV"].astype(str).str.upper().str.contains(filtro_up, na=False)
         )
         massive_table = massive_table[mask].copy()
+
+    st.markdown(
+        '<div class="soft-note"><b>Seleziona i fogli presenza da azzerare</b></div>',
+        unsafe_allow_html=True,
+    )
 
     if massive_table.empty:
         st.info("Nessun foglio presenza coerente trovato per i criteri selezionati.")
     else:
         edited_massive = st.data_editor(
-            massive_table,
+            massive_table.reset_index(drop=True),
             hide_index=True,
             use_container_width=True,
             num_rows="fixed",
@@ -1786,48 +1817,61 @@ def render_step4_page():
             key="step525_massive_table",
         )
 
-        selected_rows = edited_massive[edited_massive["SELEZIONA"] == True].copy()
-        count_selected = len(selected_rows)
+        visible_keys = set(edited_massive["FOGLIO_KEY"].tolist())
+        selected_visible = set(
+            edited_massive.loc[edited_massive["SELEZIONA"] == True, "FOGLIO_KEY"].tolist()
+        )
 
-        if selected_days and count_selected > 0:
+        selected_keys = set(st.session_state["step4_massive_selected_keys"])
+        selected_keys = selected_keys - visible_keys
+        selected_keys = selected_keys | selected_visible
+        st.session_state["step4_massive_selected_keys"] = selected_keys
+
+        count_selected = len(st.session_state["step4_massive_selected_keys"])
+
+        if selected_days_massive and count_selected > 0:
             st.markdown(
                 f"""
                 <div class="soft-note">
                     <b>Conferma operativa</b><br>
                     Fogli selezionati: {count_selected}<br>
-                    Intervallo da azzerare: {selected_days_text(selected_days)}
+                    Intervallo da azzerare: {selected_days_text(selected_days_massive)}
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
         if st.button("AZZERA ORE", type="primary", use_container_width=True, key="step525_btn_azzera"):
-            if not selected_days:
+            if not selected_days_massive:
                 st.error("Giorno o periodo non valido per il mese selezionato.")
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
                 return
 
             if count_selected == 0:
-                st.error("Seleziona almeno un foglio presenza.")
+                st.error("Seleziona almeno un foglio presenza dalla tabella.")
                 st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
                 return
 
             modificati = 0
-            for _, row in selected_rows.iterrows():
-                foglio_key = row["FOGLIO_KEY"]
+
+            for foglio_key in list(st.session_state["step4_massive_selected_keys"]):
                 if foglio_key not in st.session_state["fogli_generati"]:
                     continue
+
                 record = st.session_state["fogli_generati"][foglio_key]
+
                 if record.get("lucchetto_mese", False) or record.get("lucchetto_foglio", False):
                     continue
 
                 df = record["tabella"].copy()
+
                 for idx in df.index:
-                    if int(df.at[idx, "GIORNO_NUM"]) not in selected_days:
+                    if int(df.at[idx, "GIORNO_NUM"]) not in selected_days_massive:
                         continue
-                    if normalize_upper(record["origine_master"]) == ORIGINE_EDICOLA:
+
+                    if normalize_upper(record.get("origine_master", "")) == ORIGINE_EDICOLA:
                         df.at[idx, "EDICOLA_ORE"] = 0.0
                         df.at[idx, "EDICOLA_€"] = 0.0
                         df.at[idx, "EDICOLA_TIPO_ASSENZA"] = ""
@@ -1843,6 +1887,7 @@ def render_step4_page():
                 st.session_state["sheet_warnings"][foglio_key] = update_sheet_totals(record)
                 modificati += 1
 
+            st.session_state["step4_massive_selected_keys"] = set()
             st.success(f"Azzeramento massivo completato. Fogli aggiornati: {modificati}.")
             st.rerun()
 
