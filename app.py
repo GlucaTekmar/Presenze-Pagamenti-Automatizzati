@@ -1861,6 +1861,9 @@ def render_step4_page():
             st.markdown("</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
             return
+            
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 def render_sheet_page():
     render_page_title("3. Fogli presenza")
