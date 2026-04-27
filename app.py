@@ -1862,47 +1862,6 @@ def render_step4_page():
             st.markdown("</div>", unsafe_allow_html=True)
             return
 
-        modificati = 0
-
-        for foglio_key in list(st.session_state["step4_massive_selected_keys"]):
-            if foglio_key not in st.session_state["fogli_generati"]:
-                continue
-
-            record = st.session_state["fogli_generati"][foglio_key]
-
-            if record.get("lucchetto_mese", False) or record.get("lucchetto_foglio", False):
-                continue
-
-            df = record["tabella"].copy()
-
-            for idx in df.index:
-                if int(df.at[idx, "GIORNO_NUM"]) not in selected_days_massive:
-                    continue
-
-                if normalize_upper(record.get("origine_master", "")) == ORIGINE_EDICOLA:
-                    df.at[idx, "EDICOLA_ORE"] = 0.0
-                    df.at[idx, "EDICOLA_€"] = 0.0
-                    df.at[idx, "EDICOLA_TIPO_ASSENZA"] = ""
-                else:
-                    df.at[idx, "MONDADORI_ORE"] = 0.0
-                    df.at[idx, "MONDADORI_€"] = 0.0
-                    df.at[idx, "MONDADORI_TIPO_ASSENZA"] = ""
-                    df.at[idx, "GIUNTI_ORE"] = 0.0
-                    df.at[idx, "GIUNTI_€"] = 0.0
-                    df.at[idx, "GIUNTI_TIPO_ASSENZA"] = ""
-
-            record["tabella"] = df
-            st.session_state["sheet_warnings"][foglio_key] = update_sheet_totals(record)
-            modificati += 1
-
-        st.session_state["step4_massive_selected_keys"] = set()
-        st.success(f"Azzeramento massivo completato. Fogli aggiornati: {modificati}.")
-        st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
 def render_sheet_page():
     render_page_title("3. Fogli presenza")
     st.markdown('<div class="section-box">', unsafe_allow_html=True)
