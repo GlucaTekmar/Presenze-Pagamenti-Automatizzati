@@ -1807,6 +1807,11 @@ def render_step4_page():
         primo_giorno_massive = date(anno, mese, 1)
         ultimo_giorno_massive = date(anno, mese, calendar.monthrange(anno, mese)[1])
 
+        # Range ampio per permettere navigazione calendario,
+        # ma default allineato a mese/anno del sistema.
+        min_data_cal_massive = date(anno - 1, 1, 1)
+        max_data_cal_massive = date(anno + 1, 12, 31)
+
         giorno_singolo_value_massive = None
         periodo_value_massive = None
 
@@ -1814,16 +1819,16 @@ def render_step4_page():
             giorno_singolo_value_massive = st.date_input(
                 "Giorno singolo",
                 value=primo_giorno_massive,
-                min_value=primo_giorno_massive,
-                max_value=ultimo_giorno_massive,
+                min_value=min_data_cal_massive,
+                max_value=max_data_cal_massive,
                 key="step525_giorno_singolo",
             )
         else:
             periodo_value_massive = st.date_input(
                 "Periodo",
                 value=(primo_giorno_massive, primo_giorno_massive),
-                min_value=primo_giorno_massive,
-                max_value=ultimo_giorno_massive,
+                min_value=min_data_cal_massive,
+                max_value=max_data_cal_massive,
                 key="step525_periodo",
             )
 
