@@ -1581,6 +1581,12 @@ def render_step4_page():
 
         primo_giorno = date(anno, mese, 1)
         ultimo_giorno = date(anno, mese, calendar.monthrange(anno, mese)[1])
+
+        # Range ampio per permettere navigazione calendario,
+        # ma default allineato a mese/anno del sistema.
+        min_data_cal = date(anno - 1, 1, 1)
+        max_data_cal = date(anno + 1, 12, 31)
+
         giorno_singolo_value = None
         periodo_value = None
 
@@ -1588,16 +1594,16 @@ def render_step4_page():
             giorno_singolo_value = st.date_input(
                 "Giorno singolo",
                 value=primo_giorno,
-                min_value=primo_giorno,
-                max_value=ultimo_giorno,
+                min_value=min_data_cal,
+                max_value=max_data_cal,
                 key="step4_giorno_singolo",
             )
         else:
             periodo_value = st.date_input(
                 "Periodo",
                 value=(primo_giorno, primo_giorno),
-                min_value=primo_giorno,
-                max_value=ultimo_giorno,
+                min_value=min_data_cal,
+                max_value=max_data_cal,
                 key="step4_periodo",
             )
 
