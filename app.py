@@ -1616,19 +1616,6 @@ def render_step4_page():
             dipendenti_table = build_dipendenti_table(societa, attivita, modalita)
             pdv_table = build_pdv_table(societa, attivita)
 
-            st.markdown(
-                """
-                <div class="soft-note">
-                    Selezione guidata:
-                    <br>- puoi selezionare una sola riga per tabella
-                    <br>- puoi selezionare anche una sola tabella
-                    <br>- se selezioni solo Dipendente il PDV resta vuoto
-                    <br>- se selezioni solo Punto Vendita Nome/CF restano vuoti
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
             filtro_dip = st.text_input(
                 "Filtro tabella dipendenti",
                 placeholder="Nome / cognome",
@@ -1663,6 +1650,19 @@ def render_step4_page():
                 pdv_table = pdv_table.sort_values(
                     ["PUNTO_VENDITA", "TIPO_ATTIVITA"]
                 ).reset_index(drop=True)
+
+            st.markdown(
+                """
+                <div class="soft-note">
+                    Selezione guidata:
+                    <br>- puoi selezionare una sola riga per tabella
+                    <br>- puoi selezionare entrambe le tabelle oppure una sola
+                    <br>- se selezioni solo Dipendente, il PDV resta vuoto e le ORE saranno manuali
+                    <br>- se selezioni solo Punto Vendita, il NOME può restare vuoto ma le ORE devono essere compilate dal sistema
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
             st.markdown('<div class="table-title">Tabella dipendenti</div>', unsafe_allow_html=True)
             if dipendenti_table.empty:
@@ -1728,7 +1728,11 @@ def render_step4_page():
 
             record = base_step4_record(modalita, societa, attivita, anno, mese, selected_days)
 
-            if normalize_upper(modalita) != "FOGLIO PRESENZA VUOTO":
+            if normalize_upper(modalita) == "FOGLIO PRESENZA VUOTO":
+                # foglio completamente manuale
+                record["allow_increase"] = True
+                record["netto_mese_dynamic"] = True
+            else:
                 dip_row, dip_count = get_single_selected_row(
                     dipendenti_table if not dipendenti_table.empty else pd.DataFrame()
                 )
@@ -1743,17 +1747,16 @@ def render_step4_page():
                     return
 
                 if dip_count == 0 and pdv_count == 0:
-                    st.error("Seleziona almeno una riga da una delle due tabelle.")
+                    st.error("Selezionare almeno una riga su una delle due tabelle.")
                     st.markdown("</div>", unsafe_allow_html=True)
                     st.markdown("</div>", unsafe_allow_html=True)
                     return
 
                 apply_selected_rows_to_record(record, dip_row, pdv_row, selected_days)
 
-                # Per sostituzioni e fogli non vuoti:
-                # il foglio non deve permettere aumenti ore nel corpo
+                # I fogli STEP 4 devono sempre restare compilabili manualmente nel corpo
+                record["allow_increase"] = True
                 record["netto_mese_dynamic"] = False
-                record["allow_increase"] = False
 
             update_sheet_totals(record)
 
@@ -1843,6 +1846,7 @@ def render_step4_page():
                 "PDV": normalize_text(record.get("pdv", "")),
                 "SOCIETA": normalize_text(record.get("societa", "")),
                 "TIPO_ATTIVITA": normalize_text(record.get("attivita_riga", "")),
+                "ORIGINE": "Nuovo foglio/sostituzione" if bool(record.get("is_step4", False)) else "Master",
             }
         )
 
@@ -1857,7 +1861,7 @@ def render_step4_page():
         st.info("Nessun foglio presenza coerente trovato per i criteri selezionati.")
     else:
         massive_table = massive_table.sort_values(
-            ["NOMINATIVO_DIPENDENTE", "PDV", "TIPO_ATTIVITA"]
+            ["NOMINATIVO_DIPENDENTE", "PDV", "TIPO_ATTIVITA", "ORIGINE"]
         ).reset_index(drop=True)
 
         edited_massive = st.data_editor(
@@ -1872,6 +1876,7 @@ def render_step4_page():
                 "PDV": st.column_config.TextColumn("PDV", disabled=True),
                 "SOCIETA": st.column_config.TextColumn("Società", disabled=True),
                 "TIPO_ATTIVITA": st.column_config.TextColumn("Tipo attività", disabled=True),
+                "ORIGINE": st.column_config.TextColumn("Origine", disabled=True),
             },
             key="step525_massive_table",
         )
