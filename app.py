@@ -1599,8 +1599,7 @@ def render_step4_page():
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    anno = int(st.session_state.get("anno_step3", date.today().year))
-    mese = int(st.session_state.get("mese_step3", date.today().month))
+    anno, mese = get_mese_anno_lavoro()
     societa_options = get_societa_options()
 
     # =========================
