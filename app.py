@@ -494,8 +494,46 @@ def normalize_master_spot(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # =========================
-# SESSIONE
+# SESSIONE / STORAGE
 # =========================
+
+STORAGE_DIR = Path("/var/data") if Path("/var/data").exists() else Path(".storage")
+STATE_FILE = STORAGE_DIR / "app_state.pkl"
+
+PERSIST_KEYS = [
+    "df_edicola",
+    "df_libri",
+    "df_spot",
+    "generation_table",
+    "fogli_generati",
+    "foglio_attivo",
+    "master_loaded",
+    "sheet_warnings",
+    "anno_lavoro",
+    "mese_lavoro",
+]
+
+def save_app_state():
+    STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {key: st.session_state.get(key) for key in PERSIST_KEYS}
+    temp_file = STATE_FILE.with_suffix(".tmp")
+    with open(temp_file, "wb") as f:
+        pickle.dump(payload, f)
+    temp_file.replace(STATE_FILE)
+
+def load_app_state():
+    if not STATE_FILE.exists():
+        return
+    with open(STATE_FILE, "rb") as f:
+        payload = pickle.load(f)
+    if not isinstance(payload, dict):
+        return
+    for key in PERSIST_KEYS:
+        if key in payload:
+            st.session_state[key] = payload[key]
+
+def get_mese_anno_lavoro() -> tuple[int, int]:
+    return int(st.session_state["anno_lavoro"]), int(st.session_state["mese_lavoro"])
 
 def ensure_session_state():
     defaults = {
@@ -507,10 +545,17 @@ def ensure_session_state():
         "foglio_attivo": None,
         "master_loaded": False,
         "sheet_warnings": {},
+        "anno_lavoro": 2026,
+        "mese_lavoro": 1,
+        "_storage_loaded_once": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+    if not st.session_state["_storage_loaded_once"]:
+        load_app_state()
+        st.session_state["_storage_loaded_once"] = True
 
 # =========================
 # GENERATION TABLE
