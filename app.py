@@ -2463,5 +2463,6 @@ def main():
     elif sezione == "Chiusura mese":
         render_chiusura_mese_page()
 
+    save_app_state()
 
 main()
