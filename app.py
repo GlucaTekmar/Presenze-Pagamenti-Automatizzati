@@ -1386,11 +1386,22 @@ def render_generation_page():
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
+    anno_corrente, mese_corrente = get_mese_anno_lavoro()
+
+    anni_disponibili = [2025, 2026, 2027]
+    mesi_disponibili = list(MESI.keys())
+
+    idx_anno = anni_disponibili.index(anno_corrente) if anno_corrente in anni_disponibili else 1
+    idx_mese = mesi_disponibili.index(mese_corrente) if mese_corrente in mesi_disponibili else 0
+
     col1, col2 = st.columns(2)
     with col1:
-        anno = st.selectbox("Anno", [2025, 2026, 2027], index=1, key="anno_step3")
+        anno = st.selectbox("Anno", anni_disponibili, index=idx_anno, key="anno_step3")
     with col2:
-        mese = st.selectbox("Mese", list(MESI.keys()), format_func=lambda x: MESI[x], index=0, key="mese_step3")
+        mese = st.selectbox("Mese", mesi_disponibili, format_func=lambda x: MESI[x], index=idx_mese, key="mese_step3")
+
+    st.session_state["anno_lavoro"] = int(anno)
+    st.session_state["mese_lavoro"] = int(mese)
 
     # =========================
     # TABELLA PRINCIPALE DA MASTER
