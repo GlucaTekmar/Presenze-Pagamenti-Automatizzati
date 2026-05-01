@@ -2611,6 +2611,232 @@ def render_sheet_page():
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+def render_chiusura_mese_page():
+    render_page_title("5. Chiusura mese")
+    st.markdown('<div class="section-box">', unsafe_allow_html=True)
+
+    anno, mese = get_mese_anno_lavoro()
+    giorni_mese = calendar.monthrange(anno, mese)[1]
+
+    table_df = build_chiusura_mese_table_df(anno, mese)
+    export_df = build_chiusura_mese_export_df(anno, mese)
+
+    # =========================
+    # TABELLA DINAMICA DEL MESE
+    # =========================
+    st.markdown('<div class="inner-box">', unsafe_allow_html=True)
+    st.markdown('<div class="table-title">Tabella dinamica fogli presenza del mese</div>', unsafe_allow_html=True)
+
+    if table_df.empty:
+        st.info("Nessun foglio presenza presente per il mese selezionato.")
+    else:
+        st.dataframe(table_df, use_container_width=True, hide_index=True)
+
+        csv_export = export_df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            "Esporta tabella in Excel/CSV",
+            data=csv_export,
+            file_name=f"riepilogo_mese_{anno}_{mese:02d}.csv",
+            mime="text/csv",
+            use_container_width=False,
+            key="download_tabella_csv",
+        )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # =========================
+    # CONTATORI
+    # =========================
+    if "contatore_estrazioni_singole" not in st.session_state:
+        st.session_state["contatore_estrazioni_singole"] = 0
+    if "contatore_estrazioni_massive" not in st.session_state:
+        st.session_state["contatore_estrazioni_massive"] = 0
+
+    totale_fogli_mese = len(get_month_sheet_keys(anno, mese))
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("Totale fogli mese", totale_fogli_mese)
+    with c2:
+        st.metric("Totale estrazioni singole", int(st.session_state["contatore_estrazioni_singole"]))
+    with c3:
+        st.metric("Totale estrazione massiva", int(st.session_state["contatore_estrazioni_massive"]))
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # =========================
+    # DOWNLOAD FOGLI PDF
+    # =========================
+    st.markdown('<div class="action-box">', unsafe_allow_html=True)
+    st.markdown('<div class="action-title">DOWNLOAD FOGLI PDF</div>', unsafe_allow_html=True)
+    st.markdown('<div class="action-subtitle">Esporta i fogli presenza del mese in base ai filtri selezionati</div>', unsafe_allow_html=True)
+
+    d1, d2, d3 = st.columns(3)
+    with d1:
+        pdf_societa = st.selectbox(
+            "Società",
+            ["Tutte", "Tekmar", "UP"],
+            key="pdf_societa",
+        )
+    with d2:
+        pdf_attivita = st.selectbox(
+            "Tipo attività",
+            ["Tutte", "Edicola", "Libri"],
+            key="pdf_attivita",
+        )
+    with d3:
+        pdf_tipo_download = st.selectbox(
+            "Tipo download",
+            ["Totale", "Dipendente"],
+            key="pdf_tipo_download",
+        )
+
+    nominativi_disponibili = sorted(
+        list(
+            {
+                normalize_text(record.get("nome", ""))
+                for foglio_key, record in st.session_state["fogli_generati"].items()
+                if int(record.get("anno", 0)) == int(anno)
+                and int(record.get("mese", 0)) == int(mese)
+                and normalize_text(record.get("nome", "")) != ""
+            }
+        )
+    )
+
+    pdf_nominativo = None
+    if pdf_tipo_download == "Dipendente":
+        pdf_nominativo = st.selectbox(
+            "Seleziona dipendente",
+            nominativi_disponibili if nominativi_disponibili else [""],
+            key="pdf_nominativo",
+        )
+
+    def foglio_coerente_pdf(record: dict) -> bool:
+        if int(record.get("anno", 0)) != int(anno) or int(record.get("mese", 0)) != int(mese):
+            return False
+
+        societa_val = normalize_text(record.get("societa", ""))
+        attivita_val = normalize_upper(record.get("origine_master", ""))
+
+        if pdf_societa != "Tutte" and normalize_upper(pdf_societa) != normalize_upper(societa_val):
+            return False
+
+        if pdf_attivita != "Tutte":
+            if pdf_attivita == "Edicola" and attivita_val != ORIGINE_EDICOLA:
+                return False
+            if pdf_attivita == "Libri" and attivita_val != ORIGINE_LIBRI:
+                return False
+
+        if pdf_tipo_download == "Dipendente":
+            if normalize_upper(record.get("nome", "")) != normalize_upper(pdf_nominativo):
+                return False
+
+        return True
+
+    fogli_pdf = [
+        (foglio_key, record)
+        for foglio_key, record in st.session_state["fogli_generati"].items()
+        if foglio_coerente_pdf(record)
+    ]
+
+    st.markdown(
+        f"""
+        <div class="soft-note">
+            Fogli selezionati per il download PDF: <b>{len(fogli_pdf)}</b>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if st.button("DOWNLOAD FOGLI PDF", type="primary", use_container_width=True, key="btn_download_pdf"):
+        if not fogli_pdf:
+            st.error("Nessun foglio coerente trovato per il download selezionato.")
+        else:
+            if pdf_tipo_download == "Dipendente":
+                st.session_state["contatore_estrazioni_singole"] = len(fogli_pdf)
+            else:
+                st.session_state["contatore_estrazioni_massive"] = len(fogli_pdf)
+            st.success("Preparazione download registrata. Il blocco PDF reale verrà completato nello step finale export.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # =========================
+    # DOWNLOAD RIEPILOGO MESE
+    # =========================
+    st.markdown('<div class="action-box">', unsafe_allow_html=True)
+    st.markdown('<div class="action-title">DOWNLOAD RIEPILOGO MESE</div>', unsafe_allow_html=True)
+    st.markdown('<div class="action-subtitle">Esporta il riepilogo totale del mese in formato Excel/CSV</div>', unsafe_allow_html=True)
+
+    st.markdown(
+        f"""
+        <div class="soft-note">
+            Totale fogli inclusi nel riepilogo mese: <b>{len(export_df)}</b>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if export_df.empty:
+        st.info("Nessun dato disponibile per il riepilogo mese.")
+    else:
+        csv_riepilogo = export_df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            "DOWNLOAD RIEPILOGO MESE",
+            data=csv_riepilogo,
+            file_name=f"chiusura_mese_{anno}_{mese:02d}.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key="btn_download_riepilogo_mese",
+        )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # =========================
+    # PULIZIA MESE
+    # =========================
+    st.markdown('<div class="action-box">', unsafe_allow_html=True)
+    st.markdown('<div class="action-title">PULIZIA MESE</div>', unsafe_allow_html=True)
+    st.markdown('<div class="action-subtitle">Elimina fogli del mese e master, ripulendo anche lo storage</div>', unsafe_allow_html=True)
+
+    conferma_download = st.radio(
+        "Hai effettuato i download del mese?",
+        ["No", "Sì"],
+        horizontal=True,
+        key="pulizia_mese_conferma_download",
+    )
+
+    if st.button("PULIZIA MESE", type="primary", use_container_width=True, key="btn_pulizia_mese"):
+        if conferma_download != "Sì":
+            st.error("Prima effettua tutti i download per non perdere il lavoro del mese.")
+        else:
+            # elimina tutti i fogli del mese
+            keys_to_delete = get_month_sheet_keys(anno, mese)
+            for foglio_key in keys_to_delete:
+                st.session_state["fogli_generati"].pop(foglio_key, None)
+                st.session_state["sheet_warnings"].pop(foglio_key, None)
+
+            # elimina master e dati collegati
+            st.session_state["df_edicola"] = pd.DataFrame()
+            st.session_state["df_libri"] = pd.DataFrame()
+            st.session_state["df_spot"] = pd.DataFrame()
+            st.session_state["generation_table"] = pd.DataFrame()
+            st.session_state["master_loaded"] = False
+            st.session_state["foglio_attivo"] = None
+
+            # reset contatori download
+            st.session_state["contatore_estrazioni_singole"] = 0
+            st.session_state["contatore_estrazioni_massive"] = 0
+
+            # pulizia file storage persistente
+            if STATE_FILE.exists():
+                STATE_FILE.unlink()
+
+            st.success("Pulizia mese completata correttamente.")
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
 # =========================
 # APP
 # =========================
