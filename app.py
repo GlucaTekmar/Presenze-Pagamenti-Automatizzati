@@ -1281,6 +1281,191 @@ def apply_selected_rows_to_record(record: dict, dip_row: Optional[pd.Series], pd
                     record["tabella"].at[idx, "BASE_GIUNTI_ORE"] = ore
 
 # =========================
+# HELPERS PAGINA 5 / CHIUSURA MESE
+# =========================
+
+def get_month_sheet_keys(anno: int, mese: int) -> list[str]:
+    keys = []
+    for foglio_key, record in st.session_state["fogli_generati"].items():
+        if int(record.get("anno", 0)) == int(anno) and int(record.get("mese", 0)) == int(mese):
+            keys.append(foglio_key)
+    return keys
+
+
+def get_record_origin_label(record: dict) -> str:
+    return "Nuovo foglio/sostituzione" if bool(record.get("is_step4", False)) else "Master"
+
+
+def get_record_attivita_export(record: dict) -> str:
+    return normalize_text(record.get("attivita_riga", ""))
+
+
+def get_record_day_hours(record: dict, day_num: int) -> float:
+    df = record["tabella"]
+    row = df[df["GIORNO_NUM"] == int(day_num)]
+    if row.empty:
+        return 0.0
+
+    r = row.iloc[0]
+    if normalize_upper(record.get("origine_master", "")) == ORIGINE_EDICOLA:
+        return round(safe_float(r.get("EDICOLA_ORE", 0.0)), 2)
+
+    return round(
+        safe_float(r.get("MONDADORI_ORE", 0.0)) + safe_float(r.get("GIUNTI_ORE", 0.0)),
+        2,
+    )
+
+
+def get_record_festivo_maggiorazione(record: dict) -> float:
+    df = record["tabella"]
+    netto_ora = safe_float(record.get("netto_ora", 0.0))
+    totale = 0.0
+
+    for _, row in df.iterrows():
+        if not bool(row.get("FESTIVO", False)):
+            continue
+
+        if normalize_upper(record.get("origine_master", "")) == ORIGINE_EDICOLA:
+            ore = safe_float(row.get("EDICOLA_ORE", 0.0))
+            euro = safe_float(row.get("EDICOLA_€", 0.0))
+            base = round(ore * netto_ora, 2)
+            totale += max(round(euro - base, 2), 0.0)
+        else:
+            ore_mon = safe_float(row.get("MONDADORI_ORE", 0.0))
+            euro_mon = safe_float(row.get("MONDADORI_€", 0.0))
+            base_mon = round(ore_mon * netto_ora, 2)
+
+            ore_giu = safe_float(row.get("GIUNTI_ORE", 0.0))
+            euro_giu = safe_float(row.get("GIUNTI_€", 0.0))
+            base_giu = round(ore_giu * netto_ora, 2)
+
+            totale += max(round(euro_mon - base_mon, 2), 0.0)
+            totale += max(round(euro_giu - base_giu, 2), 0.0)
+
+    return round(totale, 2)
+
+
+def get_record_netto_mese_export(record: dict) -> float:
+    # REGOLA BLINDATA DEFINITIVA:
+    # - se origine = Master -> usa il campo netto_mese del foglio
+    # - se origine = Nuovo foglio/sostituzione -> usa tot_attivita
+    if get_record_origin_label(record) == "Master":
+        return round(safe_float(record.get("netto_mese", 0.0)), 2)
+    return round(safe_float(record.get("tot_attivita", 0.0)), 2)
+
+
+def build_chiusura_mese_export_df(anno: int, mese: int) -> pd.DataFrame:
+    giorni_mese = calendar.monthrange(anno, mese)[1]
+    righe = []
+
+    for foglio_key in get_month_sheet_keys(anno, mese):
+        record = st.session_state["fogli_generati"][foglio_key]
+
+        row = {
+            "SOCIETA'": normalize_text(record.get("societa", "")),
+            "ORIGINE": get_record_origin_label(record),
+            "ATTIVITA'": get_record_attivita_export(record),
+            "TIPO CONTRATTO": normalize_text(record.get("tipo_contratto", "")),
+            "SCADENZA CONTRATTO": normalize_text(record.get("scadenza_contratto", "")),
+            "NOMINATIVO": normalize_text(record.get("nome", "")),
+            "COD. FISCALE": normalize_text(record.get("cf", "")),
+            "TELEFONO": normalize_text(record.get("telefono", "")),
+            "EMAIL": normalize_text(record.get("email", "")),
+        }
+
+        for day_num in range(1, giorni_mese + 1):
+            row[f"{day_num:02d}"] = round(get_record_day_hours(record, day_num), 2)
+
+        row["NETTO ORARIO"] = round(safe_float(record.get("netto_ora", 0.0)), 2)
+        row["NETTO MESE"] = get_record_netto_mese_export(record)
+        row["MAGGIORAZIONE FESTIVO"] = get_record_festivo_maggiorazione(record)
+        row["ASSENZE"] = round(safe_float(record.get("tot_euro_da_scalare", 0.0)), 2)
+        row["ARRETRATO"] = round(safe_float(record.get("arretrati", 0.0)), 2)
+        row["EXTRA"] = round(safe_float(record.get("extra", 0.0)), 2)
+        row["AFFIANCAMENTO"] = round(safe_float(record.get("affiancamenti", 0.0)), 2)
+        row["DOMENICHE"] = round(safe_float(record.get("domeniche", 0.0)), 2)
+        row["RIMBORSI"] = round(safe_float(record.get("rimborso", 0.0)), 2)
+
+        row["TOT. MESE DA PAGARE"] = round(
+            row["NETTO MESE"]
+            + row["MAGGIORAZIONE FESTIVO"]
+            - row["ASSENZE"]
+            + row["ARRETRATO"]
+            + row["EXTRA"]
+            + row["AFFIANCAMENTO"]
+            + row["DOMENICHE"]
+            + row["RIMBORSI"],
+            2,
+        )
+
+        row["NOTE DEL MESE"] = normalize_text(record.get("note_generali", ""))
+        righe.append(row)
+
+    df = pd.DataFrame(righe)
+
+    if df.empty:
+        return df
+
+    giorni_cols = [f"{day_num:02d}" for day_num in range(1, calendar.monthrange(anno, mese)[1] + 1)]
+
+    ordered_cols = (
+        [
+            "SOCIETA'",
+            "ORIGINE",
+            "ATTIVITA'",
+            "TIPO CONTRATTO",
+            "SCADENZA CONTRATTO",
+            "NOMINATIVO",
+            "COD. FISCALE",
+            "TELEFONO",
+            "EMAIL",
+        ]
+        + giorni_cols
+        + [
+            "NETTO ORARIO",
+            "NETTO MESE",
+            "MAGGIORAZIONE FESTIVO",
+            "ASSENZE",
+            "ARRETRATO",
+            "EXTRA",
+            "AFFIANCAMENTO",
+            "DOMENICHE",
+            "RIMBORSI",
+            "TOT. MESE DA PAGARE",
+            "NOTE DEL MESE",
+        ]
+    )
+
+    df = df[ordered_cols].copy()
+    df = df.sort_values(["SOCIETA'", "ATTIVITA'", "PDV"] if "PDV" in df.columns else ["SOCIETA'", "ATTIVITA'", "NOMINATIVO"]).reset_index(drop=True)
+    return df
+
+
+def build_chiusura_mese_table_df(anno: int, mese: int) -> pd.DataFrame:
+    righe = []
+
+    for foglio_key in get_month_sheet_keys(anno, mese):
+        record = st.session_state["fogli_generati"][foglio_key]
+        righe.append(
+            {
+                "SOCIETA'": normalize_text(record.get("societa", "")),
+                "ORIGINE": get_record_origin_label(record),
+                "ATTIVITA'": get_record_attivita_export(record),
+                "PDV": normalize_text(record.get("pdv", "")),
+                "NOME": normalize_text(record.get("nome", "")),
+                "TELEFONO": normalize_text(record.get("telefono", "")),
+                "EMAIL": normalize_text(record.get("email", "")),
+                "CF": normalize_text(record.get("cf", "")),
+            }
+        )
+
+    df = pd.DataFrame(righe)
+    if df.empty:
+        return df
+
+    return df.sort_values(["SOCIETA'", "ATTIVITA'", "PDV", "NOME"]).reset_index(drop=True)
+
+# =========================
 # PAGINE
 # =========================
 
