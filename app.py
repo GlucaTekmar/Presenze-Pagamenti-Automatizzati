@@ -1358,99 +1358,12 @@ def get_record_festivo_maggiorazione(record: dict) -> float:
 
 
 def get_record_netto_mese_export(record: dict) -> float:
-    # REGOLA BLINDATA DEFINITIVA:
-    # - se origine = Master -> usa il campo netto_mese del foglio
-    # - se origine = Nuovo foglio/sostituzione -> usa tot_attivita
+    # REGOLA DEFINITIVA DEL FILE EXCEL UTENTE:
+    # - origine Master -> campo netto_mese del foglio
+    # - origine Nuovo foglio/sostituzione -> totale attività
     if get_record_origin_label(record) == "Master":
         return round(safe_float(record.get("netto_mese", 0.0)), 2)
     return round(safe_float(record.get("tot_attivita", 0.0)), 2)
-
-
-def build_chiusura_mese_export_df(anno: int, mese: int) -> pd.DataFrame:
-    giorni_mese = calendar.monthrange(anno, mese)[1]
-    righe = []
-
-    for foglio_key in get_month_sheet_keys(anno, mese):
-        record = st.session_state["fogli_generati"][foglio_key]
-
-        row = {
-            "SOCIETA'": normalize_text(record.get("societa", "")),
-            "ORIGINE": get_record_origin_label(record),
-            "ATTIVITA'": get_record_attivita_export(record),
-            "TIPO CONTRATTO": normalize_text(record.get("tipo_contratto", "")),
-            "SCADENZA CONTRATTO": normalize_text(record.get("scadenza_contratto", "")),
-            "NOMINATIVO": normalize_text(record.get("nome", "")),
-            "COD. FISCALE": normalize_text(record.get("cf", "")),
-            "TELEFONO": normalize_text(record.get("telefono", "")),
-            "EMAIL": normalize_text(record.get("email", "")),
-        }
-
-        for day_num in range(1, giorni_mese + 1):
-            row[f"{day_num:02d}"] = round(get_record_day_hours(record, day_num), 2)
-
-        row["NETTO ORARIO"] = round(safe_float(record.get("netto_ora", 0.0)), 2)
-        row["NETTO MESE"] = get_record_netto_mese_export(record)
-        row["MAGGIORAZIONE FESTIVO"] = get_record_festivo_maggiorazione(record)
-        row["ASSENZE"] = round(safe_float(record.get("tot_euro_da_scalare", 0.0)), 2)
-        row["ARRETRATO"] = round(safe_float(record.get("arretrati", 0.0)), 2)
-        row["EXTRA"] = round(safe_float(record.get("extra", 0.0)), 2)
-        row["AFFIANCAMENTO"] = round(safe_float(record.get("affiancamenti", 0.0)), 2)
-        row["DOMENICHE"] = round(safe_float(record.get("domeniche", 0.0)), 2)
-        row["RIMBORSI"] = round(safe_float(record.get("rimborso", 0.0)), 2)
-
-        row["TOT. MESE DA PAGARE"] = round(
-            row["NETTO MESE"]
-            + row["MAGGIORAZIONE FESTIVO"]
-            - row["ASSENZE"]
-            + row["ARRETRATO"]
-            + row["EXTRA"]
-            + row["AFFIANCAMENTO"]
-            + row["DOMENICHE"]
-            + row["RIMBORSI"],
-            2,
-        )
-
-        row["NOTE DEL MESE"] = normalize_text(record.get("note_generali", ""))
-        righe.append(row)
-
-    df = pd.DataFrame(righe)
-
-    if df.empty:
-        return df
-
-    giorni_cols = [f"{day_num:02d}" for day_num in range(1, calendar.monthrange(anno, mese)[1] + 1)]
-
-    ordered_cols = (
-        [
-            "SOCIETA'",
-            "ORIGINE",
-            "ATTIVITA'",
-            "TIPO CONTRATTO",
-            "SCADENZA CONTRATTO",
-            "NOMINATIVO",
-            "COD. FISCALE",
-            "TELEFONO",
-            "EMAIL",
-        ]
-        + giorni_cols
-        + [
-            "NETTO ORARIO",
-            "NETTO MESE",
-            "MAGGIORAZIONE FESTIVO",
-            "ASSENZE",
-            "ARRETRATO",
-            "EXTRA",
-            "AFFIANCAMENTO",
-            "DOMENICHE",
-            "RIMBORSI",
-            "TOT. MESE DA PAGARE",
-            "NOTE DEL MESE",
-        ]
-    )
-
-    df = df[ordered_cols].copy()
-    df = df.sort_values(["SOCIETA'", "ATTIVITA'", "PDV"] if "PDV" in df.columns else ["SOCIETA'", "ATTIVITA'", "NOMINATIVO"]).reset_index(drop=True)
-    return df
 
 
 def build_chiusura_mese_table_df(anno: int, mese: int) -> pd.DataFrame:
@@ -1476,6 +1389,328 @@ def build_chiusura_mese_table_df(anno: int, mese: int) -> pd.DataFrame:
         return df
 
     return df.sort_values(["SOCIETA'", "ATTIVITA'", "PDV", "NOME"]).reset_index(drop=True)
+
+
+def build_chiusura_mese_export_rows(anno: int, mese: int) -> list[dict]:
+    righe = []
+    giorni_mese = calendar.monthrange(anno, mese)[1]
+
+    for foglio_key in get_month_sheet_keys(anno, mese):
+        record = st.session_state["fogli_generati"][foglio_key]
+
+        row = {
+            "SOCIETA'": normalize_text(record.get("societa", "")),
+            "ORIGINE": get_record_origin_label(record),
+            "ATTIVITA'": get_record_attivita_export(record),
+            "TIPO CONTRATTO": normalize_text(record.get("tipo_contratto", "")),
+            "SCADENZA CONTRATTO": normalize_text(record.get("scadenza_contratto", "")),
+            "NOMINATIVO": normalize_text(record.get("nome", "")),
+            "COD. FISCALE": normalize_text(record.get("cf", "")),
+            "TELEFONO": normalize_text(record.get("telefono", "")),
+            "EMAIL": normalize_text(record.get("email", "")),
+        }
+
+        for day_num in range(1, giorni_mese + 1):
+            row[date(anno, mese, day_num)] = round(get_record_day_hours(record, day_num), 2)
+
+        row["NETTO ORARIO"] = round(safe_float(record.get("netto_ora", 0.0)), 2)
+        row["NETTO MESE"] = get_record_netto_mese_export(record)
+        row["MAGGIORAZIONE FESTIVO"] = get_record_festivo_maggiorazione(record)
+        row["ASSENZE"] = round(safe_float(record.get("tot_euro_da_scalare", 0.0)), 2)
+        row["ARRETRATO"] = round(safe_float(record.get("arretrati", 0.0)), 2)
+        row["EXTRA"] = round(safe_float(record.get("extra", 0.0)), 2)
+        row["AFFIANCAMENTO"] = round(safe_float(record.get("affiancamenti", 0.0)), 2)
+        row["DOMENICHE"] = round(safe_float(record.get("domeniche", 0.0)), 2)
+        row["RIMBORSI"] = round(safe_float(record.get("rimborso", 0.0)), 2)
+        row["TOT. MESE DA PAGARE"] = None
+        row["NOTE DEL MESE"] = normalize_text(record.get("note_generali", ""))
+
+        righe.append(row)
+
+    return righe
+
+
+def build_chiusura_mese_xlsx_bytes(anno: int, mese: int) -> bytes:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{MESI[mese]} {anno}"
+
+    giorni_mese = calendar.monthrange(anno, mese)[1]
+
+    headers = [
+        "SOCIETA'",
+        "ORIGINE",
+        "ATTIVITA'",
+        "TIPO CONTRATTO",
+        "SCADENZA CONTRATTO",
+        "NOMINATIVO",
+        "COD. FISCALE",
+        "TELEFONO",
+        "EMAIL",
+    ]
+    headers.extend([date(anno, mese, day_num) for day_num in range(1, giorni_mese + 1)])
+    headers.extend(
+        [
+            "NETTO ORARIO",
+            "NETTO MESE",
+            "MAGGIORAZIONE FESTIVO",
+            "ASSENZE",
+            "ARRETRATO",
+            "EXTRA",
+            "AFFIANCAMENTO",
+            "DOMENICHE",
+            "RIMBORSI",
+            "TOT. MESE DA PAGARE",
+            "NOTE DEL MESE",
+        ]
+    )
+
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        if isinstance(header, date):
+            cell.number_format = "dd/mm/yyyy"
+
+    rows = build_chiusura_mese_export_rows(anno, mese)
+
+    # Mappa colonne per formula finale
+    header_positions = {ws.cell(1, c).value: c for c in range(1, ws.max_column + 1)}
+
+    col_netto_mese = header_positions["NETTO MESE"]
+    col_magg = header_positions["MAGGIORAZIONE FESTIVO"]
+    col_assenze = header_positions["ASSENZE"]
+    col_arretrato = header_positions["ARRETRATO"]
+    col_extra = header_positions["EXTRA"]
+    col_aff = header_positions["AFFIANCAMENTO"]
+    col_dom = header_positions["DOMENICHE"]
+    col_rimb = header_positions["RIMBORSI"]
+    col_tot_paga = header_positions["TOT. MESE DA PAGARE"]
+
+    for row_idx, row_data in enumerate(rows, start=2):
+        for col_idx, header in enumerate(headers, start=1):
+            value = row_data.get(header, 0.0 if isinstance(header, date) else "")
+            ws.cell(row=row_idx, column=col_idx, value=value)
+
+        formula = (
+            f"={get_column_letter(col_netto_mese)}{row_idx}"
+            f"+{get_column_letter(col_magg)}{row_idx}"
+            f"-{get_column_letter(col_assenze)}{row_idx}"
+            f"+{get_column_letter(col_arretrato)}{row_idx}"
+            f"+{get_column_letter(col_extra)}{row_idx}"
+            f"+{get_column_letter(col_aff)}{row_idx}"
+            f"+{get_column_letter(col_dom)}{row_idx}"
+            f"+{get_column_letter(col_rimb)}{row_idx}"
+        )
+        ws.cell(row=row_idx, column=col_tot_paga, value=formula)
+
+    # Formati
+    for col_idx, header in enumerate(headers, start=1):
+        if isinstance(header, date):
+            for row_idx in range(2, ws.max_row + 1):
+                ws.cell(row=row_idx, column=col_idx).number_format = "0.00"
+            ws.column_dimensions[get_column_letter(col_idx)].width = 10
+        elif header in {
+            "NETTO ORARIO",
+            "NETTO MESE",
+            "MAGGIORAZIONE FESTIVO",
+            "ASSENZE",
+            "ARRETRATO",
+            "EXTRA",
+            "AFFIANCAMENTO",
+            "DOMENICHE",
+            "RIMBORSI",
+            "TOT. MESE DA PAGARE",
+        }:
+            for row_idx in range(2, ws.max_row + 1):
+                ws.cell(row=row_idx, column=col_idx).number_format = "0.00"
+            ws.column_dimensions[get_column_letter(col_idx)].width = 14
+        else:
+            ws.column_dimensions[get_column_letter(col_idx)].width = 18
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
+def safe_filename(text: str) -> str:
+    text = normalize_text(text)
+    bad = '\\/:*?"<>|'
+    for ch in bad:
+        text = text.replace(ch, "_")
+    return text.strip().replace("  ", " ")
+
+
+def build_single_sheet_pdf_bytes(record: dict) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        leftMargin=18,
+        rightMargin=18,
+        topMargin=18,
+        bottomMargin=18,
+    )
+
+    styles = getSampleStyleSheet()
+    story = []
+
+    titolo = f"{normalize_text(record.get('nome', ''))} - {normalize_text(record.get('societa', ''))} - {normalize_text(record.get('attivita_riga', ''))}"
+    story.append(Paragraph(titolo, styles["Title"]))
+    story.append(Spacer(1, 8))
+
+    header_rows = [
+        ["Società", normalize_text(record.get("societa", "")), "Attività", normalize_text(record.get("attivita_riga", ""))],
+        ["Nome", normalize_text(record.get("nome", "")), "CF", normalize_text(record.get("cf", ""))],
+        ["PDV", normalize_text(record.get("pdv", "")), "Netto ora", f"{safe_float(record.get('netto_ora', 0.0)):.2f}"],
+        ["Tipo contratto", normalize_text(record.get("tipo_contratto", "")), "Scadenza", normalize_text(record.get("scadenza_contratto", ""))],
+        ["Netto mese", f"{safe_float(record.get('netto_mese', 0.0)):.2f}", "Tot netto mese", f"{safe_float(record.get('tot_netto_mese', 0.0)):.2f}"],
+    ]
+
+    tbl_header = Table(header_rows, repeatRows=0)
+    tbl_header.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.6, colors.grey),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]
+        )
+    )
+    story.append(tbl_header)
+    story.append(Spacer(1, 10))
+
+    df = record["tabella"].copy()
+
+    if normalize_upper(record.get("origine_master", "")) == ORIGINE_EDICOLA:
+        body = [["Giorno", "Data", "Ore", "€", "Assenza", "Festivo", "Stato"]]
+        for _, row in df.iterrows():
+            body.append(
+                [
+                    int(row["GIORNO_NUM"]),
+                    normalize_text(row["DATA"]),
+                    f"{safe_float(row['EDICOLA_ORE']):.2f}",
+                    f"{safe_float(row['EDICOLA_€']):.2f}",
+                    normalize_text(row["EDICOLA_TIPO_ASSENZA"]),
+                    "Sì" if bool(row["FESTIVO"]) else "No",
+                    normalize_text(row["ROW_STATUS"]),
+                ]
+            )
+    else:
+        body = [[
+            "Giorno", "Data",
+            "Mond. Ore", "Mond. €", "Mond. Ass.",
+            "Giunti Ore", "Giunti €", "Giunti Ass.",
+            "Festivo", "Stato"
+        ]]
+        for _, row in df.iterrows():
+            body.append(
+                [
+                    int(row["GIORNO_NUM"]),
+                    normalize_text(row["DATA"]),
+                    f"{safe_float(row['MONDADORI_ORE']):.2f}",
+                    f"{safe_float(row['MONDADORI_€']):.2f}",
+                    normalize_text(row["MONDADORI_TIPO_ASSENZA"]),
+                    f"{safe_float(row['GIUNTI_ORE']):.2f}",
+                    f"{safe_float(row['GIUNTI_€']):.2f}",
+                    normalize_text(row["GIUNTI_TIPO_ASSENZA"]),
+                    "Sì" if bool(row["FESTIVO"]) else "No",
+                    normalize_text(row["ROW_STATUS"]),
+                ]
+            )
+
+    tbl_body = Table(body, repeatRows=1)
+    tbl_body.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EFEFEF")),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 7),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]
+        )
+    )
+    story.append(tbl_body)
+    story.append(Spacer(1, 10))
+
+    fondo_rows = [
+        ["Arretrato", f"{safe_float(record.get('arretrati', 0.0)):.2f}"],
+        ["Extra", f"{safe_float(record.get('extra', 0.0)):.2f}"],
+        ["Affiancamento", f"{safe_float(record.get('affiancamenti', 0.0)):.2f}"],
+        ["Domeniche", f"{safe_float(record.get('domeniche', 0.0)):.2f}"],
+        ["Rimborsi", f"{safe_float(record.get('rimborso', 0.0)):.2f}"],
+        ["Note del mese", normalize_text(record.get("note_generali", ""))],
+    ]
+
+    tbl_fondo = Table(fondo_rows, colWidths=[120, 500])
+    tbl_fondo.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+    story.append(tbl_fondo)
+
+    doc.build(story)
+    return buffer.getvalue()
+
+
+def build_pdf_zip_bytes(records: list[dict]) -> bytes:
+    zip_buffer = io.BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for record in records:
+            nome = safe_filename(record.get("nome", "Senza Nome"))
+            societa = safe_filename(record.get("societa", ""))
+            attivita = safe_filename(record.get("attivita_riga", ""))
+            filename = f"{nome}_{societa}_{attivita}.pdf"
+
+            pdf_bytes = build_single_sheet_pdf_bytes(record)
+            zf.writestr(filename, pdf_bytes)
+
+    return zip_buffer.getvalue()
+
+
+def filter_records_for_pdf_export(
+    anno: int,
+    mese: int,
+    societa: str,
+    attivita: str,
+    tipo_download: str,
+    nominativo: str | None = None,
+) -> list[dict]:
+    records = []
+
+    for foglio_key in get_month_sheet_keys(anno, mese):
+        record = st.session_state["fogli_generati"][foglio_key]
+
+        societa_record = normalize_text(record.get("societa", ""))
+        origine_master = normalize_upper(record.get("origine_master", ""))
+
+        if societa != "Tutte" and normalize_upper(societa) != normalize_upper(societa_record):
+            continue
+
+        if attivita != "Tutte":
+            if attivita == "Edicola" and origine_master != ORIGINE_EDICOLA:
+                continue
+            if attivita == "Libri" and origine_master != ORIGINE_LIBRI:
+                continue
+
+        if tipo_download == "Dipendente":
+            if normalize_upper(record.get("nome", "")) != normalize_upper(nominativo or ""):
+                continue
+
+        records.append(record)
+
+    return records
 
 # =========================
 # PAGINE
