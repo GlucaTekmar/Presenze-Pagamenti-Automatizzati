@@ -7,6 +7,18 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
+import io
+import zipfile
+
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment
+from openpyxl.utils import get_column_letter
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+
 st.set_page_config(page_title="Presenze e Pagamenti Automatizzati", layout="wide")
 
 # =========================
