@@ -1546,7 +1546,7 @@ def build_single_sheet_pdf_bytes(record: dict) -> bytes:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
-        pagesize=landscape(A4),
+        pagesize=A4,
         leftMargin=18,
         rightMargin=18,
         topMargin=18,
