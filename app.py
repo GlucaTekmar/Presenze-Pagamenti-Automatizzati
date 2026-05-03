@@ -514,6 +514,17 @@ def normalize_master_spot(df: pd.DataFrame) -> pd.DataFrame:
 STORAGE_DIR = Path("/var/data")
 STATE_FILE = STORAGE_DIR / "app_state.pkl"
 
+def check_storage_ready():
+    try:
+        STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        test_file = STORAGE_DIR / ".write_test"
+        test_file.write_text("ok", encoding="utf-8")
+        test_file.unlink(missing_ok=True)
+        return True
+    except Exception as e:
+        st.error(f"ERRORE CRITICO STORAGE: /var/data non disponibile o non scrivibile. Dettaglio: {e}")
+        st.stop()
+
 PERSIST_KEYS = [
     "df_edicola",
     "df_libri",
