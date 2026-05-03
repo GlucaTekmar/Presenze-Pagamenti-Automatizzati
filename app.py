@@ -513,6 +513,7 @@ def normalize_master_spot(df: pd.DataFrame) -> pd.DataFrame:
 
 STORAGE_DIR = Path("/var/data")
 STATE_FILE = STORAGE_DIR / "app_state.pkl"
+BACKUP_STATE_FILE = STORAGE_DIR / "app_state_backup.pkl"
 
 def check_storage_ready():
     try:
