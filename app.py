@@ -511,7 +511,7 @@ def normalize_master_spot(df: pd.DataFrame) -> pd.DataFrame:
 # SESSIONE / STORAGE
 # =========================
 
-STORAGE_DIR = Path("/var/data") if Path("/var/data").exists() else Path(".storage")
+STORAGE_DIR = Path("/var/data")
 STATE_FILE = STORAGE_DIR / "app_state.pkl"
 
 PERSIST_KEYS = [
