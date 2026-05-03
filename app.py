@@ -1646,7 +1646,7 @@ def build_single_sheet_pdf_bytes(record: dict) -> bytes:
         ["Note del mese", normalize_text(record.get("note_generali", ""))],
     ]
 
-    tbl_fondo = Table(fondo_rows, colWidths=[120, 500])
+    tbl_fondo = Table(fondo_rows, colWidths=[90, 420])
     tbl_fondo.setStyle(
         TableStyle(
             [
