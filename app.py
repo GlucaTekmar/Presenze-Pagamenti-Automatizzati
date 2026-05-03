@@ -561,6 +561,7 @@ def get_mese_anno_lavoro() -> tuple[int, int]:
     return int(st.session_state["anno_lavoro"]), int(st.session_state["mese_lavoro"])
 
 def ensure_session_state():
+    check_storage_ready()
     defaults = {
         "df_edicola": pd.DataFrame(),
         "df_libri": pd.DataFrame(),
