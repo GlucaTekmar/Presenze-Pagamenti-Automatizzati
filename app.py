@@ -3064,6 +3064,9 @@ def render_chiusura_mese_page():
             if STATE_FILE.exists():
                 STATE_FILE.unlink()
 
+            if BACKUP_STATE_FILE.exists():
+                BACKUP_STATE_FILE.unlink()
+
             st.success("Pulizia mese completata correttamente.")
             st.rerun()
 
