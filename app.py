@@ -541,6 +541,10 @@ PERSIST_KEYS = [
 
 def save_app_state():
     STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+    if STATE_FILE.exists():
+        BACKUP_STATE_FILE.write_bytes(STATE_FILE.read_bytes())
+
     payload = {key: st.session_state.get(key) for key in PERSIST_KEYS}
     temp_file = STATE_FILE.with_suffix(".tmp")
     with open(temp_file, "wb") as f:
