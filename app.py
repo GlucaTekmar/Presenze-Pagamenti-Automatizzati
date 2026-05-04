@@ -1608,7 +1608,7 @@ def build_single_sheet_pdf_bytes(record: dict) -> bytes:
             body.append(
                 [
                     int(row["GIORNO_NUM"]),
-                    normalize_text(row["DATA"]),
+                    f"{normalize_text(row['GIORNO_SETTIMANA'])} {normalize_text(row['DATA'])}",
                     f"{safe_float(row['EDICOLA_ORE']):.2f}",
                     f"{safe_float(row['EDICOLA_€']):.2f}",
                     normalize_text(row["EDICOLA_TIPO_ASSENZA"]),
@@ -1627,7 +1627,7 @@ def build_single_sheet_pdf_bytes(record: dict) -> bytes:
             body.append(
                 [
                     int(row["GIORNO_NUM"]),
-                    normalize_text(row["DATA"]),
+                    f"{normalize_text(row['GIORNO_SETTIMANA'])} {normalize_text(row['DATA'])}",
                     f"{safe_float(row['MONDADORI_ORE']):.2f}",
                     f"{safe_float(row['MONDADORI_€']):.2f}",
                     normalize_text(row["MONDADORI_TIPO_ASSENZA"]),
