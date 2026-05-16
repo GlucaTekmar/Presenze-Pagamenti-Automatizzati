@@ -1679,9 +1679,12 @@ def build_single_sheet_pdf_bytes(record: dict) -> bytes:
         TableStyle(
             [
                 ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+                ("SPAN", (1, 2), (-1, 2)),
                 ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
                 ("FONTSIZE", (0, 0), (-1, -1), 8),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
             ]
         )
     )
