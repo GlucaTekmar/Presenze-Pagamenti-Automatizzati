@@ -1421,6 +1421,7 @@ def build_chiusura_mese_export_rows(anno: int, mese: int) -> list[dict]:
             "ATTIVITA'": get_record_attivita_export(record),
             "TIPO CONTRATTO": normalize_text(record.get("tipo_contratto", "")),
             "SCADENZA CONTRATTO": normalize_text(record.get("scadenza_contratto", "")),
+            "PUNTO VENDITA": normalize_text(record.get("pdv", "")),
             "NOMINATIVO": normalize_text(record.get("nome", "")),
             "COD. FISCALE": normalize_text(record.get("cf", "")),
             "TELEFONO": normalize_text(record.get("telefono", "")),
@@ -1428,7 +1429,8 @@ def build_chiusura_mese_export_rows(anno: int, mese: int) -> list[dict]:
         }
 
         for day_num in range(1, giorni_mese + 1):
-            row[date(anno, mese, day_num)] = round(get_record_day_hours(record, day_num), 2)
+            ore_giorno = round(get_record_day_hours(record, day_num), 2)
+            row[date(anno, mese, day_num)] = ore_giorno if ore_giorno > 0 else ""
 
         row["NETTO ORARIO"] = round(safe_float(record.get("netto_ora", 0.0)), 2)
         row["NETTO MESE"] = get_record_netto_mese_export(record)
@@ -1460,6 +1462,7 @@ def build_chiusura_mese_xlsx_bytes(anno: int, mese: int) -> bytes:
         "ATTIVITA'",
         "TIPO CONTRATTO",
         "SCADENZA CONTRATTO",
+        "PUNTO VENDITA",
         "NOMINATIVO",
         "COD. FISCALE",
         "TELEFONO",
