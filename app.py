@@ -1658,15 +1658,23 @@ def build_single_sheet_pdf_bytes(record: dict) -> bytes:
     story.append(Spacer(1, 10))
 
     fondo_rows = [
-        ["Arretrato", f"{safe_float(record.get('arretrati', 0.0)):.2f}"],
-        ["Extra", f"{safe_float(record.get('extra', 0.0)):.2f}"],
-        ["Affiancamento", f"{safe_float(record.get('affiancamenti', 0.0)):.2f}"],
-        ["Domeniche", f"{safe_float(record.get('domeniche', 0.0)):.2f}"],
-        ["Rimborsi", f"{safe_float(record.get('rimborso', 0.0)):.2f}"],
-        ["Note del mese", normalize_text(record.get("note_generali", ""))],
+        [
+            "Arretrato", f"{safe_float(record.get('arretrati', 0.0)):.2f}",
+            "Extra", f"{safe_float(record.get('extra', 0.0)):.2f}",
+            "Affiancamento", f"{safe_float(record.get('affiancamenti', 0.0)):.2f}",
+        ],
+        [
+            "Domeniche", f"{safe_float(record.get('domeniche', 0.0)):.2f}",
+            "Rimborsi", f"{safe_float(record.get('rimborso', 0.0)):.2f}",
+            "", "",
+        ],
+        [
+            "Note del mese", normalize_text(record.get("note_generali", "")),
+            "", "", "", "",
+        ],
     ]
 
-    tbl_fondo = Table(fondo_rows, colWidths=[90, 420])
+    tbl_fondo = Table(fondo_rows, colWidths=[80, 85, 60, 85, 90, 110])
     tbl_fondo.setStyle(
         TableStyle(
             [
